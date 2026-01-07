@@ -52,7 +52,7 @@ go.work.sum
 .idea/**/dbnavigator.xml
 
 # Build Files
-build/*
+bin/*
 
 # Graph File
 godepgraph.png

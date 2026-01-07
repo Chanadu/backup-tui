@@ -1,3 +1,3 @@
 # backup-tui
 
-A TUI version of [backup-cli](github.com/Chanadu/backup-cli)
+A TUI version of [backup-cli](https://github.com/Chanadu/backup-cli)

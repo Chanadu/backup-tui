@@ -27,7 +27,7 @@ func (m ParametersModel) Update(msg tea.Msg) (ParametersModel, tea.Cmd) {
 	case tea.KeyMsg:
 		switch strMsg := msg.String(); strMsg {
 		case "tab", "shift+tab", "up", "down", "ctrl+j", "ctrl+k", "enter":
-			if strMsg == "enter" {
+			if strMsg == "enter" && m.focusIndex == len(m.inputs)-1 {
 				isDone := true
 				for i := range m.inputs {
 					if m.inputs[i].ti.Value() == "" {

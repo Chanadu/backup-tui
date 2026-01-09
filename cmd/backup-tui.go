@@ -5,13 +5,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type model struct {
-	input textinput.Model
-	done  bool
+	params parameters.ParametersModel
 }
 
 func (m model) Init() tea.Cmd {
@@ -19,57 +19,37 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		switch msg.String() {
-
-		case "esc", "ctrl+c":
-			return m, tea.Quit
-		case "enter":
-			m.done = true
+		strMsg := msg.String()
+		switch strMsg {
+		case "ctrl+c":
 			return m, tea.Quit
 		}
-
 	}
 
-	m.input, cmd = m.input.Update(msg)
-	return m, cmd
+	var cmd tea.Cmd
+	m.params, cmd = m.params.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
 	var s strings.Builder
-
-	// Send the UI for rendering
-	// fmt.cprintf(&s, "User: %s", m.user)
-
-	if m.done {
-		return fmt.Sprintf(
-			"You typed: %s\n",
-			m.input.Value(),
-		)
-	}
-
-	fmt.Fprintf(&s, "Enter text:\n%s\n(Press Enter to submit)", m.input.View())
+	s.WriteString(m.params.View())
+	s.WriteString("Press Ctrl+C to quit.\n")
 
 	return s.String()
 }
 
 func initialModel() model {
-	ti := textinput.New()
-
-	ti.Placeholder = "Enter Server User"
-	ti.Focus()
-	ti.CharLimit = 156
-	ti.Width = 30
-
-	m := model{
-		input: ti,
+	return model{
+		params: parameters.InitialParametersInputs(),
 	}
-
-	return m
 }
 
 func Start() {

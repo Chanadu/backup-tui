@@ -8,9 +8,8 @@ import (
 )
 
 type InputModel struct {
-	Name       string
-	promptText string
-	ti         textinput.Model
+	Name string
+	ti   textinput.Model
 }
 
 func (m InputModel) Init() tea.Cmd {
@@ -26,19 +25,24 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 
 func (m InputModel) View() string {
 	var s strings.Builder
-	s.WriteString(m.promptText)
 	s.WriteString(m.ti.View())
 
 	return s.String()
 }
 
-func InitalInputModel(name string, promptText string, placeholder string) InputModel {
+func InitalInputModel(name string, prompt string, placeholder string, isPassword bool) InputModel {
 	ti := textinput.New()
+	ti.Prompt = prompt
 	ti.Placeholder = placeholder
+	if isPassword {
+		ti.EchoMode = textinput.EchoPassword
+	}
+	ti.CharLimit = 64
+	ti.Width = 30
+	ti.EchoCharacter = '•'
 
 	return InputModel{
-		Name:       name,
-		promptText: promptText,
-		ti:         ti,
+		Name: name,
+		ti:   ti,
 	}
 }

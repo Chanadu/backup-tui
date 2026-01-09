@@ -29,6 +29,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
+	case parameters.ParametersDoneMsg:
+		// Handle the done condition here
+		// For now, just quit, or you could transition to another model/state
+		return m, tea.Quit
 	}
 
 	var cmd tea.Cmd

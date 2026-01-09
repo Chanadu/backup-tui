@@ -11,7 +11,7 @@ import (
 )
 
 type model struct {
-	params parameters.ParametersModel
+	params parameters.InputModel
 }
 
 func (m model) Init() tea.Cmd {
@@ -29,7 +29,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
-	case parameters.ParametersDoneMsg:
+	case parameters.InputDoneMsg:
 		// Handle the done condition here
 		// For now, just quit, or you could transition to another model/state
 		return m, tea.Quit

@@ -1,11 +1,26 @@
 package main
 
 import (
-	// "fmt"
+	"fmt"
+	"os"
+
 	"github.com/Chanadu/backup-tui/cmd"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
-	// fmt.Println("Hello World!")
+	if len(os.Getenv("DEBUG")) > 0 {
+		fmt.Println("DEBUG MODE")
+		f, err := tea.LogToFile("debug.log", "debug: ")
+		if err != nil {
+			fmt.Println("fatal:", err)
+			os.Exit(1)
+		}
+
+		defer func() {
+			_ = f.Close()
+		}()
+	}
+
 	cmd.Start()
 }

@@ -56,3 +56,6 @@ bin/*
 
 # Graph File
 godepgraph.png
+
+# Log Files
+.log

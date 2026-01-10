@@ -58,4 +58,4 @@ bin/*
 godepgraph.png
 
 # Log Files
-.log
+*.log

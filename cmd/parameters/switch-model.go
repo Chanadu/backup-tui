@@ -2,7 +2,6 @@ package parameters
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,7 +22,7 @@ func (m SwitchModel) Update(msg tea.Msg) (SwitchModel, tea.Cmd) {
 	if !m.focused {
 		return m, nil
 	}
-	log.Printf("Focused: %s\n", m.String())
+	// log.Printf("Focused: %s\n", m.String())
 
 	cmds := []tea.Cmd{}
 	switch msg := msg.(type) {

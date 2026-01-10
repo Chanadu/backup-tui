@@ -9,7 +9,7 @@ import (
 
 type TextModel struct {
 	Name string
-	ti   textinput.Model
+	Ti   textinput.Model
 }
 
 func (m TextModel) Init() tea.Cmd {
@@ -19,13 +19,13 @@ func (m TextModel) Init() tea.Cmd {
 func (m TextModel) Update(msg tea.Msg) (TextModel, tea.Cmd) {
 	var cmd tea.Cmd
 
-	m.ti, cmd = m.ti.Update(msg)
+	m.Ti, cmd = m.Ti.Update(msg)
 	return m, cmd
 }
 
 func (m TextModel) View() string {
 	var s strings.Builder
-	s.WriteString(m.ti.View())
+	s.WriteString(m.Ti.View())
 
 	return s.String()
 }
@@ -43,6 +43,6 @@ func InitalTextModel(name string, prompt string, placeholder string, isPassword 
 
 	return TextModel{
 		Name: name,
-		ti:   ti,
+		Ti:   ti,
 	}
 }

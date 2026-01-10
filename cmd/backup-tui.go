@@ -2,17 +2,26 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
+	"github.com/Chanadu/backup-tui/cmd/backup"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
+	"github.com/Chanadu/backup-tui/cmd/stage"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type model struct {
-	params parameters.InputModel
+	stage        stage.Stage
+	paramsInputs parameters.InputModel
+	paramsData   parameters.InputData
+
+	checkServerModel backup.CheckServerModel
 }
+
+// Paramters -> check server, create backups, upload to remote server, delete local backups
 
 func (m model) Init() tea.Cmd {
 	return textinput.Blink
@@ -29,14 +38,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
-	case parameters.InputDoneMsg:
-		// Handle the done condition here
-		// For now, just quit, or you could transition to another model/state
-		return m, tea.Quit
+	case parameters.InputDataMessage:
+		m.stage++
+		m.paramsData = msg.Data
+		m.checkServerModel = backup.InitialCheckServerModel(m.paramsData)
 	}
 
 	var cmd tea.Cmd
-	m.params, cmd = m.params.Update(msg)
+	switch m.stage {
+	case stage.Input:
+		m.paramsInputs, cmd = m.paramsInputs.Update(msg)
+	case stage.Check:
+		m.checkServerModel, cmd = m.checkServerModel.Update(msg)
+	case stage.Create:
+	case stage.Delete:
+	}
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
@@ -44,7 +60,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
-	s.WriteString(m.params.View())
+	s.WriteString(m.paramsInputs.View())
 	s.WriteString("Press Ctrl+C to quit.\n")
 
 	return s.String()
@@ -52,7 +68,8 @@ func (m model) View() string {
 
 func initialModel() model {
 	return model{
-		params: parameters.InitialParametersInputs(),
+		stage:        stage.Input,
+		paramsInputs: parameters.InitialParametersInputs(),
 	}
 }
 
@@ -62,6 +79,7 @@ func Start() {
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
 		_ = fmt.Errorf("error: %v", err)
+		log.Printf("error: %v", err)
 		os.Exit(1)
 	}
 

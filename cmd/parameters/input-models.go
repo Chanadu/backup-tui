@@ -1,20 +1,69 @@
 package parameters
 
 import (
+	"fmt"
+	"log"
+	"os"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type InputDoneMsg struct{}
+type InputData struct {
+	User     string
+	Server   string
+	Password string
+	Debug    bool
+	Commands bool
+	Progress bool
+}
+type InputDataMessage struct {
+	Data InputData
+}
 
-func ParametersDoneCmd() tea.Msg {
-	return InputDoneMsg{}
+func (m InputModel) ParametersDoneCmd() tea.Msg {
+	data := InputData{}
+	for _, textModel := range m.TextInputs {
+		name := textModel.Name
+		val := textModel.Ti.Value()
+		var err error
+		switch name {
+		case "user":
+			data.User = val
+		case "server":
+			data.Server = val
+		case "password":
+			data.Password = val
+		case "debug":
+			data.Debug, err = strconv.ParseBool(val)
+			if err != nil {
+				_ = fmt.Errorf("error parsing debug value: %v", err)
+				log.Printf("error parsing debug value: %v", err)
+				os.Exit(1)
+			}
+		case "commands":
+			data.Commands, err = strconv.ParseBool(val)
+			if err != nil {
+				_ = fmt.Errorf("error parsing commands value: %v", err)
+				log.Printf("error parsing commands value: %v", err)
+				os.Exit(1)
+			}
+		case "progress":
+			data.Progress, err = strconv.ParseBool(val)
+			if err != nil {
+				_ = fmt.Errorf("error parsing progress value: %v", err)
+				log.Printf("error parsing progress value: %v", err)
+				os.Exit(1)
+			}
+		}
+	}
+	return InputDataMessage{Data: data}
 }
 
 type InputModel struct {
-	textInputs   []TextModel
-	switchInputs []SwitchModel
+	TextInputs   []TextModel
+	SwitchInputs []SwitchModel
 	focusIndex   int
 }
 
@@ -23,7 +72,7 @@ func (m InputModel) Init() tea.Cmd {
 }
 
 func (m InputModel) totalItemCount() int {
-	return len(m.textInputs) + len(m.switchInputs)
+	return len(m.TextInputs) + len(m.SwitchInputs)
 }
 
 func (m InputModel) textInputSelected(indexes ...int) bool {
@@ -32,7 +81,7 @@ func (m InputModel) textInputSelected(indexes ...int) bool {
 	}
 	index := indexes[0]
 
-	return index < len(m.textInputs)
+	return index < len(m.TextInputs)
 }
 
 func (m InputModel) switchInputSelected(indexes ...int) bool {
@@ -41,7 +90,7 @@ func (m InputModel) switchInputSelected(indexes ...int) bool {
 	}
 	index := indexes[0]
 
-	return index >= len(m.textInputs)
+	return index >= len(m.TextInputs)
 }
 
 func (m InputModel) textIndex(indexes ...int) int {
@@ -59,7 +108,7 @@ func (m InputModel) switchIndex(indexes ...int) int {
 	}
 	index := indexes[0]
 
-	return index - len(m.textInputs)
+	return index - len(m.TextInputs)
 }
 
 func wrap(x, n int) int {
@@ -76,21 +125,21 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 
 			if strMsg == "enter" && m.focusIndex == m.totalItemCount()-1 {
 				isDone := true
-				for i := range m.textInputs {
-					if m.textInputs[i].ti.Value() == "" {
+				for i := range m.TextInputs {
+					if m.TextInputs[i].Ti.Value() == "" {
 						isDone = false
 						break
 					}
 				}
 
 				if isDone {
-					return m, ParametersDoneCmd
+					return m, m.ParametersDoneCmd
 				}
 			}
 			if m.textInputSelected() {
-				m.textInputs[m.textIndex()].ti.Blur()
+				m.TextInputs[m.textIndex()].Ti.Blur()
 			} else if m.switchInputSelected() {
-				m.switchInputs[m.switchIndex()].Blur()
+				m.SwitchInputs[m.switchIndex()].Blur()
 			}
 
 			if strMsg == "up" || strMsg == "ctrl+k" || strMsg == "shift+tab" {
@@ -102,21 +151,21 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 			m.focusIndex = wrap(m.focusIndex, m.totalItemCount())
 
 			if m.textInputSelected() {
-				m.textInputs[m.textIndex()].ti.Focus()
+				m.TextInputs[m.textIndex()].Ti.Focus()
 			} else if m.switchInputSelected() {
-				m.switchInputs[m.switchIndex()].Focus()
+				m.SwitchInputs[m.switchIndex()].Focus()
 			}
 		}
 	}
 
 	var cmd tea.Cmd
-	for i := range m.textInputs {
-		m.textInputs[i], cmd = m.textInputs[i].Update(msg)
+	for i := range m.TextInputs {
+		m.TextInputs[i], cmd = m.TextInputs[i].Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
-	for i := range m.switchInputs {
-		m.switchInputs[i], cmd = m.switchInputs[i].Update(msg)
+	for i := range m.SwitchInputs {
+		m.SwitchInputs[i], cmd = m.SwitchInputs[i].Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -134,9 +183,9 @@ func (m InputModel) View() string {
 		}
 
 		if m.textInputSelected(i) {
-			s.WriteString(m.textInputs[m.textIndex(i)].View())
+			s.WriteString(m.TextInputs[m.textIndex(i)].View())
 		} else if m.switchInputSelected(i) {
-			s.WriteString(m.switchInputs[m.switchIndex(i)].View())
+			s.WriteString(m.SwitchInputs[m.switchIndex(i)].View())
 		}
 		s.WriteString("\n")
 	}
@@ -157,10 +206,10 @@ func InitialParametersInputs() InputModel {
 	switchInputs = append(switchInputs, InitialSwitchModel("commands", "Print Commands", true))
 	switchInputs = append(switchInputs, InitialSwitchModel("progress", "Show Progress", true))
 
-	textInputs[0].ti.Focus()
+	textInputs[0].Ti.Focus()
 
 	return InputModel{
-		textInputs:   textInputs,
-		switchInputs: switchInputs,
+		TextInputs:   textInputs,
+		SwitchInputs: switchInputs,
 	}
 }

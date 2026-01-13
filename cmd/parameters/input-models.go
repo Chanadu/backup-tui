@@ -1,10 +1,6 @@
 package parameters
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,7 +23,6 @@ func (m InputModel) ParametersDoneCmd() tea.Msg {
 	for _, textModel := range m.TextInputs {
 		name := textModel.Name
 		val := textModel.Ti.Value()
-		var err error
 		switch name {
 		case "user":
 			data.User = val
@@ -35,84 +30,31 @@ func (m InputModel) ParametersDoneCmd() tea.Msg {
 			data.Server = val
 		case "password":
 			data.Password = val
-		case "debug":
-			data.Debug, err = strconv.ParseBool(val)
-			if err != nil {
-				_ = fmt.Errorf("error parsing debug value: %v", err)
-				log.Printf("error parsing debug value: %v", err)
-				os.Exit(1)
-			}
-		case "commands":
-			data.Commands, err = strconv.ParseBool(val)
-			if err != nil {
-				_ = fmt.Errorf("error parsing commands value: %v", err)
-				log.Printf("error parsing commands value: %v", err)
-				os.Exit(1)
-			}
-		case "progress":
-			data.Progress, err = strconv.ParseBool(val)
-			if err != nil {
-				_ = fmt.Errorf("error parsing progress value: %v", err)
-				log.Printf("error parsing progress value: %v", err)
-				os.Exit(1)
-			}
 		}
 	}
+	for _, switchModel := range m.SwitchInputs {
+		val := switchModel.enabled
+		switch switchModel.name {
+		case "debug":
+			data.Debug = val
+		case "commands":
+			data.Commands = val
+		case "progress":
+			data.Progress = val
+		}
+	}
+
 	return InputDataMessage{Data: data}
 }
 
 type InputModel struct {
 	TextInputs   []TextModel
 	SwitchInputs []SwitchModel
-	focusIndex   int
+	currentIndex int
 }
 
 func (m InputModel) Init() tea.Cmd {
 	return nil
-}
-
-func (m InputModel) totalItemCount() int {
-	return len(m.TextInputs) + len(m.SwitchInputs)
-}
-
-func (m InputModel) textInputSelected(indexes ...int) bool {
-	if len(indexes) == 0 {
-		indexes = append(indexes, m.focusIndex)
-	}
-	index := indexes[0]
-
-	return index < len(m.TextInputs)
-}
-
-func (m InputModel) switchInputSelected(indexes ...int) bool {
-	if len(indexes) == 0 {
-		indexes = append(indexes, m.focusIndex)
-	}
-	index := indexes[0]
-
-	return index >= len(m.TextInputs)
-}
-
-func (m InputModel) textIndex(indexes ...int) int {
-	if len(indexes) == 0 {
-		indexes = append(indexes, m.focusIndex)
-	}
-	index := indexes[0]
-
-	return index
-}
-
-func (m InputModel) switchIndex(indexes ...int) int {
-	if len(indexes) == 0 {
-		indexes = append(indexes, m.focusIndex)
-	}
-	index := indexes[0]
-
-	return index - len(m.TextInputs)
-}
-
-func wrap(x, n int) int {
-	return ((x % n) + n) % n
 }
 
 func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
@@ -123,7 +65,7 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 		switch strMsg := msg.String(); strMsg {
 		case "tab", "shift+tab", "up", "down", "ctrl+j", "ctrl+k", "enter":
 
-			if strMsg == "enter" && m.focusIndex == m.totalItemCount()-1 {
+			if strMsg == "enter" && m.currentIndex == m.totalItemCount()-1 {
 				isDone := true
 				for i := range m.TextInputs {
 					if m.TextInputs[i].Ti.Value() == "" {
@@ -136,25 +78,17 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 					return m, m.ParametersDoneCmd
 				}
 			}
-			if m.textInputSelected() {
-				m.TextInputs[m.textIndex()].Ti.Blur()
-			} else if m.switchInputSelected() {
-				m.SwitchInputs[m.switchIndex()].Blur()
-			}
+			m.blurCurrentIndex()
 
 			if strMsg == "up" || strMsg == "ctrl+k" || strMsg == "shift+tab" {
-				m.focusIndex--
+				m.currentIndex--
 			} else {
-				m.focusIndex++
+				m.currentIndex++
 			}
 
-			m.focusIndex = wrap(m.focusIndex, m.totalItemCount())
+			m.currentIndex = wrap(m.currentIndex, m.totalItemCount())
 
-			if m.textInputSelected() {
-				m.TextInputs[m.textIndex()].Ti.Focus()
-			} else if m.switchInputSelected() {
-				m.SwitchInputs[m.switchIndex()].Focus()
-			}
+			m.focusCurrentIndex()
 		}
 	}
 
@@ -176,7 +110,7 @@ func (m InputModel) View() string {
 	var s strings.Builder
 
 	for i := range m.totalItemCount() {
-		if i == m.focusIndex {
+		if i == m.currentIndex {
 			s.WriteString("> ")
 		} else {
 			s.WriteString("  ")

@@ -2,48 +2,60 @@ package backup
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
+	"log"
 	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/crypto/ssh"
 )
 
 type CheckServerMessage struct {
-	ok  bool
-	err error
+	Ok  bool
+	Err error
 }
 
-func CheckServerCmd(ok bool, err error) tea.Cmd {
-	return func() tea.Msg {
-		return CheckServerMessage{
-			ok:  ok,
-			err: err,
-		}
-	}
+type TryAgainMessage struct{}
+
+func TryAgainCmd() tea.Msg {
+	return TryAgainMessage{}
 }
 
 type CheckServerModel struct {
-	data parameters.InputData
+	data     parameters.InputData
+	done     bool
+	success  bool
+	err      error
+	attempts int
 }
 
-func (m CheckServerModel) checkServer() tea.Msg {
+func (m *CheckServerModel) checkServer() tea.Msg {
+	log.Println("checking server")
+	config := &ssh.ClientConfig{
+		User: m.data.User,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(m.data.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * 1e9,
+	}
 
-	if err := exec.Command(
-		"bash",
-		"-c",
-		fmt.Sprintf("sshpass -p %s ssh %s StrictHostKeyChecking=no 'echo 1; exit'", m.data.Password, m.data.Server),
-	).Run(); err != nil {
+	client, err := ssh.Dial("tcp", m.data.Server+":22", config)
+
+	if err != nil {
 		return CheckServerMessage{
-			ok:  false,
-			err: fmt.Errorf("error checking server: %v", err),
+			Ok:  false,
+			Err: fmt.Errorf("connecting to server: %v", err),
 		}
+	}
+	err = client.Close()
+	if err != nil {
+		log.Fatalf("error closing connection: %v", err)
 	}
 
 	return CheckServerMessage{
-		ok:  true,
-		err: nil,
+		Ok:  true,
+		Err: nil,
 	}
 }
 
@@ -54,23 +66,61 @@ func (m CheckServerModel) Init() tea.Cmd {
 func (m CheckServerModel) Update(msg tea.Msg) (CheckServerModel, tea.Cmd) {
 	cmds := []tea.Cmd{}
 
-	// switch msg := msg.(type) {
-	// case tea.KeyMsg:
-	//
-	// 	// handle key messages
-	// }
+	switch msg := msg.(type) {
+
+	case CheckServerMessage:
+		m.done = true
+		m.success = msg.Ok
+		m.err = msg.Err
+	case tea.KeyMsg:
+		if !m.done || m.success {
+			break
+		}
+		strMsg := msg.String()
+		log.Printf("Got keypress, %s", msg.String())
+
+		switch strMsg {
+		case "enter":
+			return m, TryAgainCmd
+		case "R":
+			m.done = false
+			m.attempts += 1
+			return m, m.checkServer
+		}
+	}
 
 	return m, tea.Batch(cmds...)
 }
 
 func (m CheckServerModel) View() string {
+	log.Printf("done: %t, success: %t, attempts: %d", m.done, m.success, m.attempts)
 	var s strings.Builder
-	s.WriteString("Checking Server")
+	if !m.done {
+		s.WriteString("Checking Server...")
+	} else if !m.success {
+		s.WriteString("Server Connection Failed.")
+		if m.attempts > 1 {
+			fmt.Fprintf(&s, " (%d)", m.attempts)
+		}
+		s.WriteString("\n")
+		fmt.Fprintf(&s, "error %v", m.err)
+		s.WriteString("\n\n")
+
+		s.WriteString("Press Enter to change server details.\n")
+		s.WriteString("Press R to retry.")
+	} else {
+		s.WriteString("Server Connected")
+	}
+
+	s.WriteString("\n")
+
 	return s.String()
 }
 
 func InitialCheckServerModel(data parameters.InputData) CheckServerModel {
 	return CheckServerModel{
-		data: data,
+		data:     data,
+		done:     false,
+		attempts: 1,
 	}
 }

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/backup"
@@ -42,6 +41,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stage++
 		m.paramsData = msg.Data
 		m.checkServerModel = backup.InitialCheckServerModel(m.paramsData)
+		log.Printf("Input Data Collected: %v, %s", m.paramsData, m.stage)
+		return m, m.checkServerModel.Init()
+	case backup.CheckServerMessage:
+		if msg.Ok {
+			log.Printf("Connection Succeeded")
+		} else {
+			log.Printf("Connection Failed")
+			log.Printf("error: %v", msg.Err)
+		}
+	case backup.TryAgainMessage:
+		m.paramsInputs.SetCurrentIndex(0)
+		m.stage = stage.Input
 	}
 
 	var cmd tea.Cmd
@@ -60,8 +71,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
-	s.WriteString(m.paramsInputs.View())
-	s.WriteString("Press Ctrl+C to quit.\n")
+	switch m.stage {
+	case stage.Input:
+		s.WriteString(m.paramsInputs.View())
+	case stage.Check:
+		s.WriteString(m.checkServerModel.View())
+	case stage.Create:
+	case stage.Delete:
+	}
+
+	s.WriteString("\nPress Ctrl+C to quit.")
 
 	return s.String()
 }
@@ -75,12 +94,11 @@ func initialModel() model {
 
 func Start() {
 	fmt.Println("BackupTui")
+	log.Println("=========================BACKUP-TUI=======================================")
 
 	p := tea.NewProgram(initialModel())
 	if _, err := p.Run(); err != nil {
-		_ = fmt.Errorf("error: %v", err)
-		log.Printf("error: %v", err)
-		os.Exit(1)
+		log.Fatalf("error: %v", err)
 	}
 
 	// fmt.Printf("User: %s", m.user)

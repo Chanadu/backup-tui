@@ -10,14 +10,15 @@ func _() {
 	var x [1]struct{}
 	_ = x[Input-0]
 	_ = x[Check-1]
-	_ = x[Create-2]
-	_ = x[Upload-3]
-	_ = x[Delete-4]
+	_ = x[Files-2]
+	_ = x[Create-3]
+	_ = x[Upload-4]
+	_ = x[Delete-5]
 }
 
-const _Stage_name = "InputCheckCreateUploadDelete"
+const _Stage_name = "InputCheckFilesCreateUploadDelete"
 
-var _Stage_index = [...]uint8{0, 5, 10, 16, 22, 28}
+var _Stage_index = [...]uint8{0, 5, 10, 15, 21, 27, 33}
 
 func (i Stage) String() string {
 	idx := int(i) - 0

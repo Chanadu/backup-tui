@@ -7,6 +7,7 @@ type Stage int
 const (
 	Input Stage = iota
 	Check
+	Files
 	Create
 	Upload
 	Delete

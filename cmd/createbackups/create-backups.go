@@ -3,14 +3,13 @@ package backup
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/crypto/ssh"
 )
 
-type CheckServerMessage struct {
+type CreateBackupsMessage struct {
 	Ok  bool
 	Err error
 }
@@ -21,15 +20,14 @@ func TryAgainCmd() tea.Msg {
 	return TryAgainMessage{}
 }
 
-type CheckServerModel struct {
-	data     parameters.InputData
-	done     bool
-	success  bool
-	err      error
-	attempts int
+type CreateBackupsModel struct {
+	data    parameters.InputData
+	done    bool
+	success bool
+	err     error
 }
 
-func (m *CheckServerModel) checkServer() tea.Msg {
+func (m *CreateBackupsModel) checkServer() tea.Msg {
 	log.Println("checking server")
 	config := &ssh.ClientConfig{
 		User: m.data.User,
@@ -43,7 +41,7 @@ func (m *CheckServerModel) checkServer() tea.Msg {
 	client, err := ssh.Dial("tcp", m.data.Server+":22", config)
 
 	if err != nil {
-		return CheckServerMessage{
+		return CreateBackupsMessage{
 			Ok:  false,
 			Err: fmt.Errorf("connecting to server: %v", err),
 		}
@@ -53,22 +51,22 @@ func (m *CheckServerModel) checkServer() tea.Msg {
 		log.Fatalf("error closing connection: %v", err)
 	}
 
-	return CheckServerMessage{
+	return CreateBackupsMessage{
 		Ok:  true,
 		Err: nil,
 	}
 }
 
-func (m CheckServerModel) Init() tea.Cmd {
+func (m CreateBackupsModel) Init() tea.Cmd {
 	return m.checkServer
 }
 
-func (m CheckServerModel) Update(msg tea.Msg) (CheckServerModel, tea.Cmd) {
+func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 	cmds := []tea.Cmd{}
 
 	switch msg := msg.(type) {
 
-	case CheckServerMessage:
+	case CreateBackupsMessage:
 		m.done = true
 		m.success = msg.Ok
 		m.err = msg.Err
@@ -84,7 +82,6 @@ func (m CheckServerModel) Update(msg tea.Msg) (CheckServerModel, tea.Cmd) {
 			return m, TryAgainCmd
 		case "R":
 			m.done = false
-			m.attempts += 1
 			return m, m.checkServer
 		}
 	}
@@ -92,35 +89,13 @@ func (m CheckServerModel) Update(msg tea.Msg) (CheckServerModel, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m CheckServerModel) View() string {
-	log.Printf("done: %t, success: %t, attempts: %d", m.done, m.success, m.attempts)
-	var s strings.Builder
-	if !m.done {
-		s.WriteString("Checking Server...")
-	} else if !m.success {
-		s.WriteString("Server Connection Failed.")
-		if m.attempts > 1 {
-			fmt.Fprintf(&s, " (%d)", m.attempts)
-		}
-		s.WriteString("\n")
-		fmt.Fprintf(&s, "error %v", m.err)
-		s.WriteString("\n\n")
-
-		s.WriteString("Press Enter to change server details.\n")
-		s.WriteString("Press R to retry.")
-	} else {
-		s.WriteString("Server Connected")
-	}
-
-	s.WriteString("\n")
-
-	return s.String()
+func (m CreateBackupsModel) View() string {
+	return "Creating Backups not yet implemented"
 }
 
-func InitialCheckServerModel(data parameters.InputData) CheckServerModel {
-	return CheckServerModel{
-		data:     data,
-		done:     false,
-		attempts: 1,
+func InitialCheckServerModel(data parameters.InputData) CreateBackupsModel {
+	return CreateBackupsModel{
+		data: data,
+		done: false,
 	}
 }

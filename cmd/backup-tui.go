@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	checkServer "github.com/Chanadu/backup-tui/cmd/checkserver"
@@ -19,6 +20,8 @@ type model struct {
 	paramsData  parameters.InputData
 	filesModel  getfiles.FileSelectorModel
 	checkModel  checkServer.CheckServerModel
+
+	tempDir string
 }
 
 // Paramters -> check server, create backups, upload to remote server, delete local backups
@@ -48,6 +51,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case checkServer.CheckServerMessage:
 		if msg.Ok {
 			m.stage++
+			m.filesModel = getfiles.InitialFilesSelectorModel([]string{}, m.tempDir)
 			return m, m.filesModel.Init()
 		}
 	case checkServer.TryAgainMessage:
@@ -88,10 +92,12 @@ func (m model) View() string {
 	return s.String()
 }
 
-func initialModel() model {
+func initialModel(tempDir string) model {
+
 	return model{
 		stage:       stage.Input,
 		inputsModel: parameters.InitialParametersInputs(),
+		tempDir:     tempDir,
 	}
 }
 
@@ -99,10 +105,16 @@ func Start() {
 	fmt.Println("BackupTui")
 	log.Println("=========================BACKUP-TUI=======================================")
 
-	p := tea.NewProgram(initialModel())
+	tempDir, err := os.MkdirTemp("", "filepicker-filtered-*")
+
+	if err != nil {
+		log.Fatalf("Couldn't create temp dir, error: %v", err)
+	}
+
+	defer os.RemoveAll(tempDir)
+
+	p := tea.NewProgram(initialModel(tempDir))
 	if _, err := p.Run(); err != nil {
 		log.Fatalf("error: %v", err)
 	}
-
-	// fmt.Printf("User: %s", m.user)
 }

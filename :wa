@@ -42,8 +42,7 @@ func initialFilePicker(dir string) filepicker.Model {
 	fp.KeyMap.Up.SetKeys("up", "ctrl+k")
 	fp.KeyMap.Down.SetKeys("down", "ctrl+j")
 	fp.KeyMap.Back.SetKeys("left", "ctrl+h")
-	// fp.KeyMap.Open.SetKeys("right", "ctrl+l")
-	// fp.KeyMap.Select.SetKeys("enter")
+	fp.KeyMap.Open.SetKeys("enter", "right", "ctrl+l")
 
 	var err error
 
@@ -142,6 +141,12 @@ func (m FileSelectorModel) handleSearch(msg tea.Msg) (FileSelectorModel, tea.Cmd
 
 	clearTempDir(m.tempDir)
 
+	if newSearch == "" {
+		m.UsingFilteredDir = false
+		m.Picker.SetCurrentDirectory(m.Dir)
+		return m, cmd
+	}
+
 	err := m.createFilteredSymlinkDir(m.Dir, newSearch)
 
 	if err != nil {
@@ -166,7 +171,7 @@ func (m FileSelectorModel) Update(msg tea.Msg) (FileSelectorModel, tea.Cmd) {
 	case tea.KeyMsg:
 		strMsg := msg.String()
 
-		if !m.Prompting && strMsg != " " {
+		if !m.Prompting {
 			m, cmd = m.handleSearch(msg)
 			cmds = append(cmds, cmd)
 			break
@@ -188,6 +193,7 @@ func (m FileSelectorModel) Update(msg tea.Msg) (FileSelectorModel, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 	}
 
+	log.Printf("Updating file picker in dir: %s", m.Picker.CurrentDirectory)
 	m.Picker, cmd = m.Picker.Update(msg)
 	cmds = append(cmds, cmd)
 
@@ -196,17 +202,25 @@ func (m FileSelectorModel) Update(msg tea.Msg) (FileSelectorModel, tea.Cmd) {
 		m.Prompting = true
 	}
 
+	// Add this block to allow selecting directories
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "enter" {
+		cursorPath := m.Picker.Cursor
+		info, err := os.Stat(cursorPath)
+		if err == nil && info.IsDir() {
+			m.SelectedPaths = append(m.SelectedPaths, cursorPath)
+			m.Prompting = true
+		}
+	}
+
 	return m, tea.Batch(cmds...)
 }
 
 func (m FileSelectorModel) View() string {
 	var s strings.Builder
 
-	if !m.Prompting {
-		s.WriteString("Search: ")
-		s.WriteString(m.Search.View())
-		s.WriteString("\n")
-	}
+	s.WriteString("Search: ")
+	s.WriteString(m.Search.View())
+	s.WriteString("\n")
 
 	s.WriteString("Selected:\n")
 
@@ -220,16 +234,13 @@ func (m FileSelectorModel) View() string {
 		s.WriteString("\n")
 	}
 	s.WriteString("\n")
-	if m.UsingFilteredDir {
-		s.WriteString("(Filtered View)\n")
-
-	}
 
 	if m.Done {
 		s.WriteString("File selection complete.")
 	} else if m.Prompting {
 		s.WriteString("Pick another file? (y/n)\n")
 	} else {
+
 		s.WriteString(m.Picker.View())
 	}
 

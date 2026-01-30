@@ -37,6 +37,21 @@ func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
+func (m model) cleanUp() tea.Msg {
+	err := os.RemoveAll(m.tempDir)
+	log.Printf("Cleaning up temp dir: %s", m.tempDir)
+	if err != nil {
+		log.Printf("Couldn't remove temp dir %s, error: %v", m.tempDir, err)
+	}
+
+	log.Printf("Killing any running backup processes.")
+	if m.createBackupsModel.CurrentCmd != nil {
+		log.Printf("Killing process with PID: %d", m.createBackupsModel.CurrentCmd.Process.Pid)
+		_ = m.createBackupsModel.CurrentCmd.Process.Kill()
+	}
+	return tea.Quit
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -46,6 +61,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		strMsg := msg.String()
 		switch strMsg {
 		case "ctrl+c":
+			m.cleanUp()
 			return m, tea.Quit
 		}
 	case parameters.InputDataMessage:
@@ -72,7 +88,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.filesSelected = msg.Paths
 		m.stage++
-		m.createBackupsModel = createbackups.InitialCreateBackupsModel(m.paramsData, m.filesSelected)
+		m.createBackupsModel = createbackups.InitialCreateBackupsModel(m.paramsData, m.filesSelected, m.tempDir)
+		return m, m.createBackupsModel.Init()
 	}
 
 	var cmd tea.Cmd
@@ -130,14 +147,11 @@ func Start() {
 		log.Fatalf("Couldn't create temp dir, error: %v", err)
 	}
 
-	defer func() {
-		err := os.RemoveAll(tempDir)
-		if err != nil {
-			log.Printf("Couldn't remove temp dir %s, error: %v", tempDir, err)
-		}
-	}()
+	m := initialModel(tempDir)
+	p := tea.NewProgram(m)
 
-	p := tea.NewProgram(initialModel(tempDir))
+	defer m.cleanUp()
+
 	if _, err := p.Run(); err != nil {
 		log.Fatalf("error: %v", err)
 	}

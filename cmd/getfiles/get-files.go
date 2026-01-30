@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/getfiles/filepicker"
+	"github.com/Chanadu/backup-tui/cmd/utils"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -111,23 +112,6 @@ func (m FileSelectorModel) createFilteredSymlinkDir(srcDir string, query string)
 	return nil
 }
 
-func clearTempDir(dir string) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		log.Printf("Couldn't open dir, error: %v", err)
-	}
-
-	for _, file := range files {
-		name := file.Name()
-		itemPath := filepath.Join(dir, name)
-
-		err = os.RemoveAll(itemPath)
-		if err != nil {
-			log.Printf("Couldn't remove item: %s, error: %v", itemPath, err)
-		}
-	}
-}
-
 func (m FileSelectorModel) handleSearch(msg tea.Msg) (FileSelectorModel, tea.Cmd) {
 
 	oldSearch := m.Search.Value()
@@ -140,7 +124,7 @@ func (m FileSelectorModel) handleSearch(msg tea.Msg) (FileSelectorModel, tea.Cmd
 		return m, cmd
 	}
 
-	clearTempDir(m.tempDir)
+	utils.ClearDir(m.tempDir)
 
 	err := m.createFilteredSymlinkDir(m.Dir, newSearch)
 
@@ -178,6 +162,7 @@ func (m FileSelectorModel) Update(msg tea.Msg) (FileSelectorModel, tea.Cmd) {
 			return m, m.Picker.Init()
 		case "n":
 			m.Done = true
+			utils.ClearDir(m.tempDir)
 			return m, func() tea.Msg {
 				return FilesSelectedMsg{Paths: m.SelectedPaths}
 			}

@@ -378,6 +378,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
+func arePathsEquivalent(path1, path2 string) (bool, error) {
+	fi1, err1 := os.Stat(path1)
+	if err1 != nil {
+		return false, err1
+	}
+	fi2, err2 := os.Stat(path2)
+	if err2 != nil {
+		return false, err2
+	}
+
+	return os.SameFile(fi1, fi2), nil
+}
+
 // View returns the view of the file picker.
 func (m Model) View() string {
 	if len(m.files) == 0 {
@@ -398,12 +411,17 @@ func (m Model) View() string {
 		if err != nil {
 			continue // skip entries with errors
 		}
+
 		isSymlink := info.Mode()&os.ModeSymlink != 0
 		size := strings.Replace(humanize.Bytes(uint64(info.Size())), " ", "", 1) //nolint:gosec
 		name := f.Name()
 
 		if isSymlink {
 			symlinkPath, _ = filepath.EvalSymlinks(filepath.Join(m.CurrentDirectory, name))
+		}
+
+		if isSame, _ := arePathsEquivalent(symlinkPath, filepath.Join(m.CurrentDirectory, f.Name())); isSame {
+			isSymlink = false
 		}
 
 		disabled := !m.canSelect(name) && !f.IsDir()

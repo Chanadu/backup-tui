@@ -1,23 +1,15 @@
-package backup
+package createbackups
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
-	"golang.org/x/crypto/ssh"
 )
 
 type CreateBackupsMessage struct {
 	Ok  bool
 	Err error
-}
-
-type TryAgainMessage struct{}
-
-func TryAgainCmd() tea.Msg {
-	return TryAgainMessage{}
 }
 
 type CreateBackupsModel struct {
@@ -27,29 +19,8 @@ type CreateBackupsModel struct {
 	err     error
 }
 
-func (m *CreateBackupsModel) checkServer() tea.Msg {
-	log.Println("checking server")
-	config := &ssh.ClientConfig{
-		User: m.data.User,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(m.data.Password),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * 1e9,
-	}
-
-	client, err := ssh.Dial("tcp", m.data.Server+":22", config)
-
-	if err != nil {
-		return CreateBackupsMessage{
-			Ok:  false,
-			Err: fmt.Errorf("connecting to server: %v", err),
-		}
-	}
-	err = client.Close()
-	if err != nil {
-		log.Fatalf("error closing connection: %v", err)
-	}
+func (m *CreateBackupsModel) createBackups() tea.Msg {
+	log.Println("creating Backups")
 
 	return CreateBackupsMessage{
 		Ok:  true,
@@ -58,7 +29,7 @@ func (m *CreateBackupsModel) checkServer() tea.Msg {
 }
 
 func (m CreateBackupsModel) Init() tea.Cmd {
-	return m.checkServer
+	return m.createBackups
 }
 
 func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
@@ -70,20 +41,6 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 		m.done = true
 		m.success = msg.Ok
 		m.err = msg.Err
-	case tea.KeyMsg:
-		if !m.done || m.success {
-			break
-		}
-		strMsg := msg.String()
-		log.Printf("Got keypress, %s", msg.String())
-
-		switch strMsg {
-		case "enter":
-			return m, TryAgainCmd
-		case "R":
-			m.done = false
-			return m, m.checkServer
-		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -93,7 +50,7 @@ func (m CreateBackupsModel) View() string {
 	return "Creating Backups not yet implemented"
 }
 
-func InitialCheckServerModel(data parameters.InputData) CreateBackupsModel {
+func InitialCreateBackupsModel(data parameters.InputData, paths []string) CreateBackupsModel {
 	return CreateBackupsModel{
 		data: data,
 		done: false,

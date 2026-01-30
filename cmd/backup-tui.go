@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	checkServer "github.com/Chanadu/backup-tui/cmd/checkserver"
+	"github.com/Chanadu/backup-tui/cmd/createbackups"
 	"github.com/Chanadu/backup-tui/cmd/getfiles"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/stage"
@@ -15,11 +16,17 @@ import (
 )
 
 type model struct {
-	stage       stage.Stage
+	stage stage.Stage
+
 	inputsModel parameters.InputModel
 	paramsData  parameters.InputData
-	filesModel  getfiles.FileSelectorModel
-	checkModel  checkServer.CheckServerModel
+
+	checkModel checkServer.CheckServerModel
+
+	filesModel    getfiles.FileSelectorModel
+	filesSelected []string
+
+	createBackupsModel createbackups.CreateBackupsModel
 
 	tempDir string
 }
@@ -56,6 +63,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case checkServer.TryAgainMessage:
 		m.stage = stage.Input
+
+	case getfiles.FilesSelectedMsg:
+		if len(msg.Paths) == 0 {
+			log.Println("No files selected, exiting")
+			return m, tea.Quit
+		}
+
+		m.filesSelected = msg.Paths
+		m.stage++
+		m.createBackupsModel = createbackups.InitialCreateBackupsModel(m.paramsData, m.filesSelected)
 	}
 
 	var cmd tea.Cmd
@@ -67,6 +84,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stage.Files:
 		m.filesModel, cmd = m.filesModel.Update(msg)
 	case stage.Create:
+		m.createBackupsModel, cmd = m.createBackupsModel.Update(msg)
 	case stage.Delete:
 	}
 	cmds = append(cmds, cmd)
@@ -84,6 +102,7 @@ func (m model) View() string {
 	case stage.Files:
 		s.WriteString(m.filesModel.View())
 	case stage.Create:
+		s.WriteString(m.createBackupsModel.View())
 	case stage.Delete:
 	}
 
@@ -111,7 +130,12 @@ func Start() {
 		log.Fatalf("Couldn't create temp dir, error: %v", err)
 	}
 
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err := os.RemoveAll(tempDir)
+		if err != nil {
+			log.Printf("Couldn't remove temp dir %s, error: %v", tempDir, err)
+		}
+	}()
 
 	p := tea.NewProgram(initialModel(tempDir))
 	if _, err := p.Run(); err != nil {

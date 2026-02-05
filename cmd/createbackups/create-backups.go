@@ -1,9 +1,7 @@
 package createbackups
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os/exec"
 	"path/filepath"
@@ -15,14 +13,13 @@ import (
 )
 
 type CreateBackupsMessage struct {
-	Oks  []bool
+	Ok   bool
 	Errs []error
 }
 
 type BackupOutputMsg struct {
-	CurrentFile string
-	Done        bool
-	Err         error
+	Done bool
+	Err  error
 }
 
 type CreateBackupsModel struct {
@@ -35,7 +32,6 @@ type CreateBackupsModel struct {
 
 	current     int
 	currentFile string
-	output      string
 }
 
 var runningCmd *exec.Cmd
@@ -53,6 +49,7 @@ func (m *CreateBackupsModel) KillProcess() {
 		}
 	}
 }
+
 func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 	filePath := m.paths[m.current]
 	baseName := filepath.Base(filePath)
@@ -60,49 +57,35 @@ func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 	archivePath := filepath.Join(m.tempDir, archiveName)
 	log.Printf("Creating archive for %s at %s", filePath, archivePath)
 
+	m.currentFile = filePath
+
 	cmd := exec.Command("7z", "a", "-mx=9", archivePath, filePath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	log.Printf("Executing command: %s", strings.Join(cmd.Args, " "))
 
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
 	if err := cmd.Start(); err != nil {
-		m.output += "Failed to start 7z: " + err.Error() + "\n"
 		return BackupOutputMsg{
-			CurrentFile: filePath,
-			Done:        true,
-			Err:         err,
+			Done: true,
+			Err:  err,
 		}
 	}
 
 	log.Printf("Started 7z process with PID %d", cmd.Process.Pid)
 	runningCmd = cmd
-	log.Printf("Reading output for %s", filePath)
-	reader := io.MultiReader(stdout, stderr)
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		line := scanner.Text()
-		m.output += line + "\n"
-		log.Printf("7z output: %s", line)
-	}
+	log.Printf("Waiting for process to finish for %s", filePath)
 
-	log.Printf("Finished reading output for %s", filePath)
-	err := cmd.Wait()
-	if err != nil {
+	if err := cmd.Wait(); err != nil {
 		log.Printf("7z command failed for %s: %v", filePath, err)
 		return BackupOutputMsg{
-			CurrentFile: filePath,
-			Done:        true,
-			Err:         err,
+			Done: true,
+			Err:  err,
 		}
 	}
 
 	return BackupOutputMsg{
-		CurrentFile: filePath,
-		Done:        true,
-		Err:         err,
+		Done: true,
+		Err:  nil,
 	}
 }
 
@@ -115,7 +98,6 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case BackupOutputMsg:
-		m.currentFile = msg.CurrentFile
 		if msg.Err != nil {
 			m.errs = append(m.errs, msg.Err)
 		}
@@ -126,7 +108,13 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 
 		m.done = true
 		m.success = len(m.errs) == 0
-		return m, nil
+		log.Printf("Backup creation done. Success: %v, Errors: %d\n", m.success, len(m.errs))
+		return m, func() tea.Msg {
+			return CreateBackupsMessage{
+				Ok:   m.success,
+				Errs: m.errs,
+			}
+		}
 	}
 
 	return m, nil
@@ -134,10 +122,10 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 
 func (m CreateBackupsModel) View() string {
 	var s strings.Builder
+	s.WriteString("\n")
 	if !m.done {
-		fmt.Fprintf(&s, "Creating backup for: %s\n\n%s",
-			m.currentFile,
-			m.output)
+		fmt.Fprintf(&s, "Creating backup for: %s\n",
+			m.currentFile)
 		return s.String()
 	}
 	if m.success {

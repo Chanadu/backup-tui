@@ -11,6 +11,7 @@ import (
 	"github.com/Chanadu/backup-tui/cmd/getfiles"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/stage"
+	"github.com/Chanadu/backup-tui/cmd/uploadbackups"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -27,6 +28,9 @@ type model struct {
 	filesSelected []string
 
 	createBackupsModel createbackups.CreateBackupsModel
+	archivePaths       []string
+
+	uploadBackupsModel uploadbackups.UploadBackupsModel
 
 	tempDir string
 }
@@ -61,7 +65,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch strMsg {
 		case "ctrl+c":
 			log.Printf("User initiated quit")
-			m.cleanUp()
 			return m, tea.Quit
 		}
 	case parameters.InputDataMessage:
@@ -90,6 +93,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stage++
 		m.createBackupsModel = createbackups.InitialCreateBackupsModel(m.paramsData, m.filesSelected, m.tempDir)
 		return m, m.createBackupsModel.Init()
+	case createbackups.CreateBackupsMessage:
+		if !msg.Ok {
+			for _, err := range msg.Errs {
+				log.Printf("Error during backup creation: %v", err)
+				return m, tea.Quit
+			}
+		}
+		m.stage++
+		m.uploadBackupsModel = uploadbackups.InitialUploadBackupsModel(m.paramsData, m.archivePaths)
+		log.Printf("Created backups: %v", m.archivePaths)
+
 	}
 
 	var cmd tea.Cmd
@@ -102,6 +116,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesModel, cmd = m.filesModel.Update(msg)
 	case stage.Create:
 		m.createBackupsModel, cmd = m.createBackupsModel.Update(msg)
+	case stage.Upload:
+		m.uploadBackupsModel, cmd = m.uploadBackupsModel.Update(msg)
 	case stage.Delete:
 	}
 	cmds = append(cmds, cmd)
@@ -120,6 +136,8 @@ func (m model) View() string {
 		s.WriteString(m.filesModel.View())
 	case stage.Create:
 		s.WriteString(m.createBackupsModel.View())
+	case stage.Upload:
+		s.WriteString(m.uploadBackupsModel.View())
 	case stage.Delete:
 	}
 

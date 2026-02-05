@@ -44,10 +44,9 @@ func (m model) cleanUp() tea.Msg {
 		log.Printf("Couldn't remove temp dir %s, error: %v", m.tempDir, err)
 	}
 
-	log.Printf("Killing any running backup processes.")
-	if m.createBackupsModel.CurrentCmd != nil {
-		log.Printf("Killing process with PID: %d", m.createBackupsModel.CurrentCmd.Process.Pid)
-		_ = m.createBackupsModel.CurrentCmd.Process.Kill()
+	if m.stage == stage.Create {
+		m.createBackupsModel.KillProcess()
+		log.Printf("Killed create backups process")
 	}
 	return tea.Quit
 }
@@ -61,6 +60,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		strMsg := msg.String()
 		switch strMsg {
 		case "ctrl+c":
+			log.Printf("User initiated quit")
 			m.cleanUp()
 			return m, tea.Quit
 		}

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,9 +36,23 @@ type CreateBackupsModel struct {
 	current     int
 	currentFile string
 	output      string
-	CurrentCmd  *exec.Cmd
 }
 
+var runningCmd *exec.Cmd
+
+func (m *CreateBackupsModel) KillProcess() {
+	log.Printf("KillProcess called: m.cmd=%v", runningCmd)
+	if runningCmd != nil && runningCmd.Process != nil {
+		pgid, err := syscall.Getpgid(runningCmd.Process.Pid)
+		if err == nil {
+			log.Printf("Killing process group %d", pgid)
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
+		} else {
+			log.Printf("Killing process PID %d", runningCmd.Process.Pid)
+			_ = runningCmd.Process.Kill()
+		}
+	}
+}
 func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 	filePath := m.paths[m.current]
 	baseName := filepath.Base(filePath)
@@ -46,7 +61,7 @@ func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 	log.Printf("Creating archive for %s at %s", filePath, archivePath)
 
 	cmd := exec.Command("7z", "a", "-mx=9", archivePath, filePath)
-	m.CurrentCmd = cmd
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	log.Printf("Executing command: %s", strings.Join(cmd.Args, " "))
 
@@ -55,7 +70,6 @@ func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 
 	if err := cmd.Start(); err != nil {
 		m.output += "Failed to start 7z: " + err.Error() + "\n"
-		m.CurrentCmd = nil
 		return BackupOutputMsg{
 			CurrentFile: filePath,
 			Done:        true,
@@ -63,6 +77,8 @@ func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 		}
 	}
 
+	log.Printf("Started 7z process with PID %d", cmd.Process.Pid)
+	runningCmd = cmd
 	log.Printf("Reading output for %s", filePath)
 	reader := io.MultiReader(stdout, stderr)
 	scanner := bufio.NewScanner(reader)
@@ -83,7 +99,6 @@ func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
 		}
 	}
 
-	m.CurrentCmd = nil
 	return BackupOutputMsg{
 		CurrentFile: filePath,
 		Done:        true,

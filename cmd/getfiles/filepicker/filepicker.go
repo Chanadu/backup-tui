@@ -266,7 +266,38 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			break
 		}
 		m.files = msg.entries
-		m.max = max(m.max, m.Height-1)
+		if len(m.files) == 0 {
+			m.selected = 0
+			m.min = 0
+			m.max = max(0, m.Height-1)
+			break
+		}
+
+		if m.selected < 0 {
+			m.selected = 0
+		}
+		if m.selected >= len(m.files) {
+			m.selected = len(m.files) - 1
+		}
+
+		if m.min < 0 {
+			m.min = 0
+		}
+		if m.min > m.selected {
+			m.min = m.selected
+		}
+
+		if m.Height < 1 {
+			m.Height = 1
+		}
+		m.max = m.min + m.Height - 1
+		if m.max >= len(m.files) {
+			m.max = len(m.files) - 1
+			m.min = m.max - m.Height + 1
+			if m.min < 0 {
+				m.min = 0
+			}
+		}
 	case tea.WindowSizeMsg:
 		if m.AutoHeight {
 			m.Height = msg.Height - marginBottom
@@ -344,12 +375,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			if len(m.files) == 0 {
 				break
 			}
+			if m.selected < 0 || m.selected >= len(m.files) {
+				break
+			}
 
 			f := m.files[m.selected]
 			symlinkPath, _ := filepath.EvalSymlinks(filepath.Join(m.CurrentDirectory, f.Name()))
 			m.Path = path.Clean(symlinkPath)
 		case key.Matches(msg, m.KeyMap.Open):
 			if len(m.files) == 0 {
+				break
+			}
+			if m.selected < 0 || m.selected >= len(m.files) {
 				break
 			}
 
@@ -527,6 +564,9 @@ func (m Model) DidSelectDisabledFile(msg tea.Msg) (bool, string) {
 
 func (m Model) didSelectFile(msg tea.Msg) (bool, string) {
 	if len(m.files) == 0 {
+		return false, ""
+	}
+	if m.selected < 0 || m.selected >= len(m.files) {
 		return false, ""
 	}
 	switch msg := msg.(type) {

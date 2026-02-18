@@ -8,11 +8,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -43,6 +45,26 @@ type backupRuntimeState struct {
 }
 
 var percentRegex = regexp.MustCompile(`(\d+)%`)
+
+func percentToFraction(percent string) float64 {
+	percent = strings.TrimSuffix(strings.TrimSpace(percent), "%")
+	value, err := strconv.Atoi(percent)
+	if err != nil {
+		return 0
+	}
+	if value < 0 {
+		value = 0
+	}
+	if value > 100 {
+		value = 100
+	}
+	return float64(value) / 100
+}
+
+func renderProgressBar(percent string) string {
+	bar := progress.New(progress.WithWidth(40))
+	return bar.ViewAs(percentToFraction(percent))
+}
 
 func startNextBackupCmd() tea.Cmd {
 	return func() tea.Msg {
@@ -282,7 +304,7 @@ func (m CreateBackupsModel) View() string {
 			}
 		}
 		fmt.Fprintf(&s, "[%d/%d] Creating backup for: %s\n", currentIdx, total, m.currentFile)
-		fmt.Fprintf(&s, "Progress: %s\n", m.progressPercent)
+		fmt.Fprintf(&s, "%s\n", renderProgressBar(m.progressPercent))
 
 		if m.data.Commands && m.currentFile != "" {
 			baseName := filepath.Base(m.currentFile)

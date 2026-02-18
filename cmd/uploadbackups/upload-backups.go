@@ -7,11 +7,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -64,6 +66,26 @@ type uploadRuntimeState struct {
 type progressReader struct {
 	reader io.Reader
 	state  *uploadRuntimeState
+}
+
+func percentToFraction(percent string) float64 {
+	percent = strings.TrimSuffix(strings.TrimSpace(percent), "%")
+	value, err := strconv.Atoi(percent)
+	if err != nil {
+		return 0
+	}
+	if value < 0 {
+		value = 0
+	}
+	if value > 100 {
+		value = 100
+	}
+	return float64(value) / 100
+}
+
+func renderProgressBar(percent string) string {
+	bar := progress.New(progress.WithWidth(40))
+	return bar.ViewAs(percentToFraction(percent))
 }
 
 func (r *progressReader) Read(p []byte) (int, error) {
@@ -329,7 +351,7 @@ func (m UploadBackupsModel) View() string {
 	s.WriteString("\nUpload Backups\n")
 	if !m.done {
 		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", m.currentIdx, m.totalFiles, m.currentFile)
-		fmt.Fprintf(&s, "Progress: %s\n", m.uploadPct)
+		fmt.Fprintf(&s, "%s\n", renderProgressBar(m.uploadPct))
 
 	} else if m.success {
 		s.WriteString("All files uploaded successfully!\n")

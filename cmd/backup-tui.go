@@ -157,7 +157,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
-	s.WriteString(styles.AppTitleStyle.Render("BETTER-TUI"))
+	s.WriteString(styles.AppTitleStyle.Render("BACKUP-TUI"))
 	s.WriteString("\n")
 	s.WriteString(styles.TitleStyle.Render(m.stageTitle()))
 	s.WriteString("\n")

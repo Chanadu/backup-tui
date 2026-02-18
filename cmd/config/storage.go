@@ -45,6 +45,31 @@ func GetConfigFilePath() (string, error) {
 	return filepath.Join(configDir, "config.json"), nil
 }
 
+// GetLogDir returns the log directory path based on OS
+func GetLogDir() (string, error) {
+	configDir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "log"), nil
+}
+
+// GetLogFilePath returns the full path to a log file with the given name
+func GetLogFilePath(filename string) (string, error) {
+	logDir, err := GetLogDir()
+	if err != nil {
+		return "", err
+	}
+
+	// Create log directory if it doesn't exist
+	err = os.MkdirAll(logDir, 0700)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(logDir, filename), nil
+}
+
 // SaveConfig saves the parameters (except password) to disk
 func SaveConfig(user, server, backupPath string, debug, commands, progress bool) error {
 	configPath, err := GetConfigFilePath()

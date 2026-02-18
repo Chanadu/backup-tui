@@ -6,15 +6,22 @@ import (
 	"time"
 
 	"github.com/Chanadu/backup-tui/cmd"
+	"github.com/Chanadu/backup-tui/cmd/config"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
 	if len(os.Getenv("DEBUG")) > 0 {
 		fmt.Println("DEBUG MODE")
-		f, err := tea.LogToFile("debug.log", "")
+		logPath, err := config.GetLogFilePath("debug.log")
 		if err != nil {
-			fmt.Println("fatal:", err)
+			fmt.Printf("Error getting log path: %v\n", err)
+			os.Exit(1)
+		}
+
+		f, err := tea.LogToFile(logPath, "")
+		if err != nil {
+			fmt.Printf("fatal: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -22,9 +29,15 @@ func main() {
 			_ = f.Close()
 		}()
 	} else {
-		f, err := tea.LogToFile(fmt.Sprintf("%s.log", time.Now().Format("2006-01-02_15-04-05")), "debug: ")
+		logPath, err := config.GetLogFilePath(fmt.Sprintf("%s.log", time.Now().Format("2006-01-02_15-04-05")))
 		if err != nil {
-			fmt.Println("fatal:", err)
+			fmt.Printf("Error getting log path: %v\n", err)
+			os.Exit(1)
+		}
+
+		f, err := tea.LogToFile(logPath, "debug: ")
+		if err != nil {
+			fmt.Printf("fatal: %v\n", err)
 			os.Exit(1)
 		}
 

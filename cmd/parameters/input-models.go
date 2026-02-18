@@ -179,7 +179,7 @@ func InitialParametersInputs() InputModel {
 	switchInputs := []SwitchModel{}
 	// switchInputs = append(switchInputs, InitialSwitchModel("debug", "Debug", false))
 	switchInputs = append(switchInputs, InitialSwitchModel("commands", "Print Commands", savedConfig.Commands))
-	// switchInputs = append(switchInputs, InitialSwitchModel("progress", "Show Progress", true))
+	switchInputs = append(switchInputs, InitialSwitchModel("progress", "Show Progress", savedConfig.Progress))
 
 	textInputs[0].Ti.Focus()
 

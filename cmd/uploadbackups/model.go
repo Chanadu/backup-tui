@@ -144,25 +144,28 @@ func (m UploadBackupsModel) View() string {
 		s.WriteString("  ")
 		s.WriteString(styles.InfoStyle.Render(m.currentFile))
 		s.WriteString("\n")
-		s.WriteString(m.spinner.View())
-		s.WriteString(" ")
-		s.WriteString(renderProgressBar(m.uploadPct))
-		s.WriteString("\n")
 
-		if !m.currentUploadStart.IsZero() {
-			elapsed := time.Since(m.currentUploadStart)
-			speedMBps := 0.0
-			if m.runtimeState != nil && elapsed.Seconds() > 0 {
-				uploaded := m.runtimeState.uploadedBytes()
-				speedMBps = float64(uploaded) / (1024.0 * 1024.0) / elapsed.Seconds()
+		if m.data.Progress {
+			s.WriteString(m.spinner.View())
+			s.WriteString(" ")
+			s.WriteString(renderProgressBar(m.uploadPct))
+			s.WriteString("\n")
+
+			if !m.currentUploadStart.IsZero() {
+				elapsed := time.Since(m.currentUploadStart)
+				speedMBps := 0.0
+				if m.runtimeState != nil && elapsed.Seconds() > 0 {
+					uploaded := m.runtimeState.uploadedBytes()
+					speedMBps = float64(uploaded) / (1024.0 * 1024.0) / elapsed.Seconds()
+				}
+				s.WriteString("\n")
+				s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
+				s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
+				s.WriteString("   ")
+				s.WriteString(styles.TimerLabelStyle.Render("Speed: "))
+				s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2f MB/s", speedMBps)))
+				s.WriteString("\n")
 			}
-			s.WriteString("\n")
-			s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
-			s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
-			s.WriteString("   ")
-			s.WriteString(styles.TimerLabelStyle.Render("Speed: "))
-			s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2f MB/s", speedMBps)))
-			s.WriteString("\n")
 		}
 
 	} else if m.success {

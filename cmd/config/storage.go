@@ -117,18 +117,20 @@ func LoadConfig() SavedConfig {
 	jsonData, err := os.ReadFile(configPath)
 	if err != nil {
 		// File doesn't exist or can't be read, return defaults
-		return SavedConfig{Commands: true} // Commands is true by default
+		return SavedConfig{Commands: true, Progress: true}
 	}
 
 	var config SavedConfig
 	err = json.Unmarshal(jsonData, &config)
 	if err != nil {
-		return SavedConfig{Commands: true}
+		return SavedConfig{Commands: true, Progress: true}
 	}
 
-	// Ensure Commands defaults to true if not set
+	// Set defaults for new fields if not explicitly set
+	// If loading an old config, ensure Progress defaults to true
 	if !config.Commands && !config.Debug && !config.Progress {
 		config.Commands = true
+		config.Progress = true
 	}
 
 	return config

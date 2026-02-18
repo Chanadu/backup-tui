@@ -122,17 +122,20 @@ func (m CreateBackupsModel) View() string {
 		s.WriteString(" ")
 		s.WriteString(styles.InfoStyle.Render(m.currentFile))
 		s.WriteString("\n\n")
-		s.WriteString(m.spinner.View())
-		s.WriteString(" ")
-		s.WriteString(renderProgressBar(m.progressPercent))
-		s.WriteString("\n")
 
-		if !m.currentBackupStart.IsZero() {
-			elapsed := time.Since(m.currentBackupStart)
+		if m.data.Progress {
+			s.WriteString(m.spinner.View())
+			s.WriteString(" ")
+			s.WriteString(renderProgressBar(m.progressPercent))
 			s.WriteString("\n")
-			s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
-			s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
-			s.WriteString("\n")
+
+			if !m.currentBackupStart.IsZero() {
+				elapsed := time.Since(m.currentBackupStart)
+				s.WriteString("\n")
+				s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
+				s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
+				s.WriteString("\n")
+			}
 		}
 
 		if m.data.Commands && m.currentFile != "" {

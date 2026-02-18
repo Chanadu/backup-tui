@@ -160,7 +160,7 @@ func (m UploadBackupsModel) View() string {
 				}
 				s.WriteString("\n")
 				s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
-				s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
+				s.WriteString(styles.TimerStyle.Render(formatDurationWithMinutes(elapsed)))
 				s.WriteString("   ")
 				s.WriteString(styles.TimerLabelStyle.Render("Speed: "))
 				s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2f MB/s", speedMBps)))
@@ -185,7 +185,7 @@ func (m UploadBackupsModel) View() string {
 		totalTime := time.Since(m.totalStartTime)
 		s.WriteString("\n")
 		s.WriteString(styles.TimerLabelStyle.Render("Total time: "))
-		s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", totalTime.Seconds())))
+		s.WriteString(styles.TimerStyle.Render(formatDurationWithMinutes(totalTime)))
 		s.WriteString("\n")
 
 		// Combined timing table
@@ -228,12 +228,12 @@ func (m UploadBackupsModel) View() string {
 
 				var creationTime, uploadTime string
 				if i < len(m.creationTimes) {
-					creationTime = fmt.Sprintf("%.2fs", m.creationTimes[i].Seconds())
+					creationTime = formatDurationWithMinutes(m.creationTimes[i])
 				} else {
 					creationTime = "-"
 				}
 				if i < len(m.uploadTimes) {
-					uploadTime = fmt.Sprintf("%.2fs", m.uploadTimes[i].Seconds())
+					uploadTime = formatDurationWithMinutes(m.uploadTimes[i])
 				} else {
 					uploadTime = "-"
 				}
@@ -250,6 +250,13 @@ func (m UploadBackupsModel) View() string {
 		}
 	}
 	return s.String()
+}
+
+func formatDurationWithMinutes(d time.Duration) string {
+	totalSeconds := d.Seconds()
+	minutes := int(totalSeconds) / 60
+	seconds := totalSeconds - float64(minutes*60)
+	return fmt.Sprintf("%dm %.2fs", minutes, seconds)
 }
 
 // InitialUploadBackupsModel creates a new UploadBackupsModel with initial state

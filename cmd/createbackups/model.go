@@ -133,7 +133,7 @@ func (m CreateBackupsModel) View() string {
 				elapsed := time.Since(m.currentBackupStart)
 				s.WriteString("\n")
 				s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
-				s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
+				s.WriteString(styles.TimerStyle.Render(formatDurationWithMinutes(elapsed)))
 				s.WriteString("\n")
 			}
 		}
@@ -167,7 +167,7 @@ func (m CreateBackupsModel) View() string {
 		totalTime := time.Since(m.totalStartTime)
 		s.WriteString("\n")
 		s.WriteString(styles.TimerLabelStyle.Render("Total time: "))
-		s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", totalTime.Seconds())))
+		s.WriteString(styles.TimerStyle.Render(formatDurationWithMinutes(totalTime)))
 		s.WriteString("\n")
 		if len(m.backupTimes) > 0 {
 			s.WriteString("\n")
@@ -195,7 +195,7 @@ func (m CreateBackupsModel) View() string {
 				row := fmt.Sprintf("  %-4d  %-40s  %s",
 					i+1,
 					fileName,
-					fmt.Sprintf("%.2fs", dur.Seconds()))
+					formatDurationWithMinutes(dur))
 				s.WriteString(row)
 				s.WriteString("\n")
 			}
@@ -203,6 +203,13 @@ func (m CreateBackupsModel) View() string {
 		}
 	}
 	return s.String()
+}
+
+func formatDurationWithMinutes(d time.Duration) string {
+	totalSeconds := d.Seconds()
+	minutes := int(totalSeconds) / 60
+	seconds := totalSeconds - float64(minutes*60)
+	return fmt.Sprintf("%dm %.2fs", minutes, seconds)
 }
 
 // InitialCreateBackupsModel creates a new CreateBackupsModel with initial state

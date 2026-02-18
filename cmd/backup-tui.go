@@ -34,6 +34,23 @@ type model struct {
 	tempDir string
 }
 
+func (m model) stageTitle() string {
+	switch m.stage {
+	case stage.Input:
+		return "Parameters"
+	case stage.Check:
+		return "Check Server"
+	case stage.Files:
+		return "Select Files"
+	case stage.Create:
+		return "Create Backups"
+	case stage.Upload:
+		return "Upload Backups"
+	default:
+		return "Backup TUI"
+	}
+}
+
 // Paramters -> check server, create backups, upload to remote server, delete local backups
 func (m model) Init() tea.Cmd {
 	return textinput.Blink
@@ -137,6 +154,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
+	fmt.Fprintf(&s, "\n%s\n\n", m.stageTitle())
 	switch m.stage {
 	case stage.Input:
 		s.WriteString(m.inputsModel.View())

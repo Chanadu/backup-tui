@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -293,7 +293,6 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 
 func (m CreateBackupsModel) View() string {
 	var s strings.Builder
-	s.WriteString("\n")
 	if !m.done {
 		currentIdx := 0
 		total := len(m.paths)

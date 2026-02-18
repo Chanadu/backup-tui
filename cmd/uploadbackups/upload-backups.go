@@ -348,7 +348,6 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 
 func (m UploadBackupsModel) View() string {
 	var s strings.Builder
-	s.WriteString("\nUpload Backups\n")
 	if !m.done {
 		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", m.currentIdx, m.totalFiles, m.currentFile)
 		fmt.Fprintf(&s, "%s\n", renderProgressBar(m.uploadPct))

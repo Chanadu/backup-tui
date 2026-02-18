@@ -2,7 +2,6 @@ package filepicker
 
 import (
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"path"
@@ -447,37 +446,6 @@ func arePathsEquivalent(path1, path2 string) (bool, error) {
 	return os.SameFile(fi1, fi2), nil
 }
 
-func calculateDirectorySize(root string) uint64 {
-	var total uint64
-
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		if d.Type()&os.ModeSymlink != 0 {
-			return nil
-		}
-
-		info, statErr := d.Info()
-		if statErr != nil {
-			return nil
-		}
-
-		if info.Mode().IsRegular() && info.Size() > 0 {
-			total += uint64(info.Size())
-		}
-
-		return nil
-	})
-
-	return total
-}
-
 // View returns the view of the file picker.
 func (m Model) View() string {
 	if len(m.files) == 0 {
@@ -501,7 +469,7 @@ func (m Model) View() string {
 
 		isSymlink := info.Mode()&os.ModeSymlink != 0
 		isDir := f.IsDir()
-		sizeBytes := uint64(info.Size()) //nolint:gosec
+		size := strings.Replace(humanize.Bytes(uint64(info.Size())), " ", "", 1) //nolint:gosec
 		name := f.Name()
 
 		if isSymlink {
@@ -519,16 +487,6 @@ func (m Model) View() string {
 		}
 
 		displaySymlink := isSymlink && !isDir
-
-		if isDir {
-			sizePath := filepath.Join(m.CurrentDirectory, name)
-			if symlinkPath != "" {
-				sizePath = symlinkPath
-			}
-			sizeBytes = calculateDirectorySize(sizePath)
-		}
-
-		size := strings.Replace(humanize.Bytes(sizeBytes), " ", "", 1)
 
 		disabled := !m.canSelect(name) && !isDir
 

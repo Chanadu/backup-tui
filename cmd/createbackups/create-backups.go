@@ -17,27 +17,44 @@ type CreateBackupsMessage struct {
 	Errs []error
 }
 
+func (m *CreateBackupsModel) createBackupsMessageCmd(err error) tea.Cmd {
+	if err != nil {
+		m.errs = append(m.errs, err)
+	}
+	m.done = true
+	m.success = len(m.errs) == 0
+	return func() tea.Msg {
+		return CreateBackupsMessage{Ok: m.success, Errs: m.errs}
+	}
+}
+
 type BackupOutputMsg struct {
-	Done bool
-	Err  error
+	Err error
+}
+type SetCurrentFileMsg struct {
+	File string
+}
+
+func setCurrentFileCmd(file string) tea.Cmd {
+	return func() tea.Msg {
+		return SetCurrentFileMsg{File: file}
+	}
 }
 
 type CreateBackupsModel struct {
-	data    parameters.InputData
-	tempDir string
-	paths   []string
-	done    bool
-	success bool
-	errs    []error
-
-	current     int
+	data        parameters.InputData
+	tempDir     string
+	paths       []string
+	done        bool
+	success     bool
+	errs        []error
 	currentFile string
 }
 
 var runningCmd *exec.Cmd
 
 func (m *CreateBackupsModel) KillProcess() {
-	log.Printf("KillProcess called: m.cmd=%v", runningCmd)
+	log.Printf("KillProcess called: runningCmd=%v", runningCmd)
 	if runningCmd != nil && runningCmd.Process != nil {
 		pgid, err := syscall.Getpgid(runningCmd.Process.Pid)
 		if err == nil {
@@ -50,73 +67,67 @@ func (m *CreateBackupsModel) KillProcess() {
 	}
 }
 
-func (m *CreateBackupsModel) stream7zOutput() tea.Msg {
-	filePath := m.paths[m.current]
-	baseName := filepath.Base(filePath)
-	archiveName := baseName + "-backup.7z"
-	archivePath := filepath.Join(m.tempDir, archiveName)
-	log.Printf("Creating archive for %s at %s", filePath, archivePath)
+func (m *CreateBackupsModel) backupCmd(filePath string) tea.Cmd {
+	return func() tea.Msg {
+		baseName := filepath.Base(filePath)
+		archiveName := baseName + "-backup.7z"
+		archivePath := filepath.Join(m.tempDir, archiveName)
+		log.Printf("Creating archive for %s at %s", filePath, archivePath)
 
-	m.currentFile = filePath
+		cmd := exec.Command("7z", "a", "-mx=9", archivePath, filePath)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	cmd := exec.Command("7z", "a", "-mx=9", archivePath, filePath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		log.Printf("Executing command: %s", strings.Join(cmd.Args, " "))
 
-	log.Printf("Executing command: %s", strings.Join(cmd.Args, " "))
-
-	if err := cmd.Start(); err != nil {
-		return BackupOutputMsg{
-			Done: true,
-			Err:  err,
+		if err := cmd.Start(); err != nil {
+			return m.createBackupsMessageCmd(fmt.Errorf("failed to start 7z: %v", err))
 		}
-	}
 
-	log.Printf("Started 7z process with PID %d", cmd.Process.Pid)
-	runningCmd = cmd
-	log.Printf("Waiting for process to finish for %s", filePath)
+		log.Printf("Started 7z process with PID %d", cmd.Process.Pid)
+		runningCmd = cmd
+		log.Printf("Waiting for process to finish for %s", filePath)
 
-	if err := cmd.Wait(); err != nil {
-		log.Printf("7z command failed for %s: %v", filePath, err)
-		return BackupOutputMsg{
-			Done: true,
-			Err:  err,
+		if err := cmd.Wait(); err != nil {
+			log.Printf("7z command errored for %s: %v", filePath, err)
+			return nil
 		}
-	}
 
-	return BackupOutputMsg{
-		Done: true,
-		Err:  nil,
+		return nil
 	}
 }
 
 func (m CreateBackupsModel) Init() tea.Cmd {
 	log.Printf("Starting backup creation for %d files.", len(m.paths))
-	return m.stream7zOutput
+
+	var cmds []tea.Cmd
+	for _, path := range m.paths {
+		cmds = append(cmds, setCurrentFileCmd(path))
+		cmds = append(cmds, m.backupCmd(path))
+	}
+
+	cmds = append(cmds, m.createBackupsMessageCmd(nil))
+
+	return tea.Sequence(cmds...)
 }
 
 func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 	switch msg := msg.(type) {
+	case SetCurrentFileMsg:
+		m.currentFile = msg.File
+		return m, nil
 
 	case BackupOutputMsg:
 		if msg.Err != nil {
 			m.errs = append(m.errs, msg.Err)
 		}
-		m.current++
-		if m.current < len(m.paths) {
-			return m, m.stream7zOutput
-		}
+		return m, nil
 
+	case CreateBackupsMessage:
 		m.done = true
-		m.success = len(m.errs) == 0
-		log.Printf("Backup creation done. Success: %v, Errors: %d\n", m.success, len(m.errs))
-		return m, func() tea.Msg {
-			return CreateBackupsMessage{
-				Ok:   m.success,
-				Errs: m.errs,
-			}
-		}
+		m.success = msg.Ok
+		m.errs = msg.Errs
+		return m, nil
 	}
-
 	return m, nil
 }
 
@@ -124,14 +135,33 @@ func (m CreateBackupsModel) View() string {
 	var s strings.Builder
 	s.WriteString("\n")
 	if !m.done {
-		fmt.Fprintf(&s, "Creating backup for: %s\n",
-			m.currentFile)
+		currentIdx := 0
+		total := len(m.paths)
+		for i, f := range m.paths {
+			if f == m.currentFile {
+				currentIdx = i + 1
+				break
+			}
+		}
+		fmt.Fprintf(&s, "[%d/%d] Creating backup for: %s\n", currentIdx, total, m.currentFile)
+
+		if m.data.Commands && m.currentFile != "" {
+			baseName := filepath.Base(m.currentFile)
+			archiveName := baseName + "-backup.7z"
+			archivePath := filepath.Join(m.tempDir, archiveName)
+			cmdStr := fmt.Sprintf("7z a -mx=9 %s %s", archivePath, m.currentFile)
+			fmt.Fprintf(&s, "Command: %s\n", cmdStr)
+		}
+
 		return s.String()
 	}
 	if m.success {
 		s.WriteString("All backups created successfully!")
 	} else {
 		fmt.Fprintf(&s, "Backups finished with %d errors.", len(m.errs))
+		for i, err := range m.errs {
+			fmt.Fprintf(&s, "[%d] %s: %v", i, m.paths[i], err)
+		}
 	}
 	return s.String()
 }

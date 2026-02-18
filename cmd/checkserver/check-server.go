@@ -1,4 +1,4 @@
-package backup
+package checkserver
 
 import (
 	"fmt"
@@ -53,7 +53,7 @@ func (m *CheckServerModel) checkServer() tea.Msg {
 	}
 	err = client.Close()
 	if err != nil {
-		log.Fatalf("error closing connection: %v", err)
+		log.Printf("error closing connection: %v", err)
 	}
 
 	log.Printf("Connection success")

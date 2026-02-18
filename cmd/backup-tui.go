@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	checkServer "github.com/Chanadu/backup-tui/cmd/checkserver"
+	"github.com/Chanadu/backup-tui/cmd/checkserver"
 	"github.com/Chanadu/backup-tui/cmd/createbackups"
 	"github.com/Chanadu/backup-tui/cmd/getfiles"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
@@ -22,13 +22,12 @@ type model struct {
 	inputsModel parameters.InputModel
 	paramsData  parameters.InputData
 
-	checkModel checkServer.CheckServerModel
+	checkModel checkserver.CheckServerModel
 
 	filesModel    getfiles.FileSelectorModel
 	filesSelected []string
 
 	createBackupsModel createbackups.CreateBackupsModel
-	archivePaths       []string
 
 	uploadBackupsModel uploadbackups.UploadBackupsModel
 
@@ -36,12 +35,11 @@ type model struct {
 }
 
 // Paramters -> check server, create backups, upload to remote server, delete local backups
-
 func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m model) cleanUp() tea.Msg {
+func (m model) cleanUp() tea.Cmd {
 	err := os.RemoveAll(m.tempDir)
 	log.Printf("Cleaning up temp dir: %s", m.tempDir)
 	if err != nil {
@@ -52,6 +50,8 @@ func (m model) cleanUp() tea.Msg {
 		m.createBackupsModel.KillProcess()
 		log.Printf("Killed create backups process")
 	}
+
+	log.Printf("Exiting")
 	return tea.Quit
 }
 
@@ -65,28 +65,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch strMsg {
 		case "ctrl+c":
 			log.Printf("User initiated quit")
-			return m, tea.Quit
+
+			return m, m.cleanUp()
 		}
 	case parameters.InputDataMessage:
 		m.stage++
 		m.paramsData = msg.Data
-		m.checkModel = checkServer.InitialCheckServerModel(m.paramsData)
+		m.checkModel = checkserver.InitialCheckServerModel(m.paramsData)
 		log.Printf("Input Data Collected: %v, %s", m.paramsData, m.stage)
 		m.inputsModel.SetCurrentIndex(0)
 		return m, m.checkModel.Init()
-	case checkServer.CheckServerMessage:
+	case checkserver.CheckServerMessage:
 		if msg.Ok {
 			m.stage++
 			m.filesModel = getfiles.InitialFilesSelectorModel([]string{}, m.tempDir)
 			return m, m.filesModel.Init()
 		}
-	case checkServer.TryAgainMessage:
+	case checkserver.TryAgainMessage:
 		m.stage = stage.Input
 
 	case getfiles.FilesSelectedMsg:
 		if len(msg.Paths) == 0 {
 			log.Println("No files selected, exiting")
-			return m, tea.Quit
+			return m, m.cleanUp()
 		}
 
 		m.filesSelected = msg.Paths
@@ -97,13 +98,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.Ok {
 			for _, err := range msg.Errs {
 				log.Printf("Error during backup creation: %v", err)
-				return m, tea.Quit
+				return m, m.cleanUp()
 			}
 		}
+		log.Printf("Created backups:")
 		m.stage++
-		m.uploadBackupsModel = uploadbackups.InitialUploadBackupsModel(m.paramsData, m.archivePaths)
-		log.Printf("Created backups: %v", m.archivePaths)
+		m.uploadBackupsModel = uploadbackups.InitialUploadBackupsModel(m.paramsData, m.tempDir)
+		return m, m.uploadBackupsModel.Init()
 
+	case uploadbackups.UploadBackupsMessage:
+		if !msg.Ok {
+			for _, err := range msg.Errs {
+				log.Printf("Error during backup upload: %v", err)
+			}
+			return m, m.cleanUp()
+		}
+		log.Printf("Created uploads")
+		return m, m.cleanUp()
 	}
 
 	var cmd tea.Cmd
@@ -118,7 +129,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.createBackupsModel, cmd = m.createBackupsModel.Update(msg)
 	case stage.Upload:
 		m.uploadBackupsModel, cmd = m.uploadBackupsModel.Update(msg)
-	case stage.Delete:
 	}
 	cmds = append(cmds, cmd)
 
@@ -138,7 +148,6 @@ func (m model) View() string {
 		s.WriteString(m.createBackupsModel.View())
 	case stage.Upload:
 		s.WriteString(m.uploadBackupsModel.View())
-	case stage.Delete:
 	}
 
 	s.WriteString("\nPress Ctrl+C to quit.")
@@ -159,7 +168,7 @@ func Start() {
 	fmt.Println("BackupTui")
 	log.Println("=========================BACKUP-TUI=======================================")
 
-	tempDir, err := os.MkdirTemp("", "filepicker-filtered-*")
+	tempDir, err := os.MkdirTemp("", "backup-tui-*")
 
 	if err != nil {
 		log.Fatalf("Couldn't create temp dir, error: %v", err)

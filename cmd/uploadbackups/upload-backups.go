@@ -5,9 +5,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,9 +20,25 @@ type UploadBackupsMessage struct {
 	Errs []error
 }
 
-type UploadFileProgressMsg struct {
-	Err  error
-	Done bool
+func (m *UploadBackupsModel) uploadBackupsMessageCmd(err error) tea.Cmd {
+	if err != nil {
+		m.errs = append(m.errs, err)
+	}
+
+	m.done = true
+	m.success = len(m.errs) == 0
+
+	return func() tea.Msg {
+		return UploadBackupsMessage{Ok: m.success, Errs: m.errs}
+	}
+}
+
+type SetCurrentFileMsg struct {
+	File string
+}
+
+type UploadFileResultMsg struct {
+	Err error
 }
 
 type UploadBackupsModel struct {
@@ -32,148 +48,164 @@ type UploadBackupsModel struct {
 	done        bool
 	success     bool
 	errs        []error
-	current     int // 0-based index
 	currentFile string
+
+	sshClient  *ssh.Client
+	sftpClient *sftp.Client
 }
 
-var runningCmd *os.Process
-
-func (m *UploadBackupsModel) KillProcess() {
-	log.Printf("KillProcess called: runningCmd=%v", runningCmd)
-	if runningCmd != nil {
-		pgid, err := syscall.Getpgid(runningCmd.Pid)
-		if err == nil {
-			log.Printf("Killing process group %d", pgid)
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		} else {
-			log.Printf("Killing process PID %d", runningCmd.Pid)
-			_ = runningCmd.Kill()
-		}
-	}
-}
-
-func (m *UploadBackupsModel) connectSSH() (*ssh.Client, error) {
+func (m *UploadBackupsModel) connectSSH() error {
 	config := &ssh.ClientConfig{
 		User: m.data.User,
 		Auth: []ssh.AuthMethod{
 			ssh.Password(m.data.Password),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * 1e9, // 5 seconds
+		Timeout:         5 * 1e9,
 	}
-	return ssh.Dial("tcp", m.data.Server+":22", config)
-}
-
-func uploadSingleFile(data parameters.InputData, tempDir, fileName string) error {
-	client, err := (&UploadBackupsModel{data: data}).connectSSH()
+	client, err := ssh.Dial("tcp", m.data.Server+":22", config)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
-
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
-		return fmt.Errorf("failed to start SFTP: %w", err)
+		defer func() {
+			err := client.Close()
+			if err != nil {
+				log.Printf("Error closing SSH client: %v", err)
+			}
+		}()
+		return fmt.Errorf("failed to start SFTP: %v", err)
 	}
-	defer sftpClient.Close()
+	m.sshClient = client
+	m.sftpClient = sftpClient
+	return nil
+}
 
-	localPath := filepath.Join(tempDir, fileName)
-	remotePath := fileName
+func (m *UploadBackupsModel) uploadSingleFile(fileName string) error {
+	if m.sftpClient == nil {
+		return fmt.Errorf("SFTP client not initialized")
+	}
+
+	localPath := filepath.Join(m.tempDir, fileName)
+	remotePath := path.Join(m.data.BackupPath, fileName)
+
+	log.Printf("Uploading file: local=%s remote=%s", localPath, remotePath)
 
 	srcFile, err := os.Open(localPath)
 	if err != nil {
-		return fmt.Errorf("failed to open local file %s: %w", localPath, err)
+		return fmt.Errorf("failed to open local file %s: %v", localPath, err)
 	}
-	defer srcFile.Close()
+	defer func() {
+		err := srcFile.Close()
+		if err != nil {
+			log.Printf("Error closing local file %s: %v", localPath, err)
+		}
+	}()
 
-	dstFile, err := sftpClient.Create(remotePath)
+	dstFile, err := m.sftpClient.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 	if err != nil {
-		return fmt.Errorf("failed to create remote file %s: %w", remotePath, err)
+		return fmt.Errorf("failed to open remote file %s: %v", remotePath, err)
 	}
-	defer dstFile.Close()
+	defer func() {
+		err := dstFile.Close()
+		if err != nil {
+			log.Printf("Error closing remote file %s: %v", remotePath, err)
+		}
+	}()
 
 	_, err = io.Copy(dstFile, srcFile)
 	if err != nil {
 		return fmt.Errorf("failed to copy file %s: %w", fileName, err)
 	}
+	log.Printf("Successfully uploaded file: %s", fileName)
 	return nil
 }
 
-func (m UploadBackupsModel) Init() tea.Cmd {
+func setCurrentFileCmd(file string) tea.Cmd {
 	return func() tea.Msg {
-		entries, err := os.ReadDir(m.tempDir)
+		return SetCurrentFileMsg{File: file}
+	}
+}
+
+func uploadFileCmd(m UploadBackupsModel, file string) tea.Cmd {
+	return func() tea.Msg {
+		err := m.uploadSingleFile(file)
 		if err != nil {
-			return UploadBackupsMessage{
-				Ok:   false,
-				Errs: []error{fmt.Errorf("failed to read tempDir: %w", err)},
+			log.Printf("Error uploading file %s: %v", file, err)
+		}
+		return m.uploadBackupsMessageCmd(err)
+	}
+}
+
+func (m UploadBackupsModel) startUploadCmd(files []string) tea.Msg {
+	var cmds []tea.Cmd
+
+	for _, file := range files {
+		cmds = append(cmds, setCurrentFileCmd(file))
+		cmds = append(cmds, uploadFileCmd(m, file))
+	}
+	cmds = append(cmds, func() tea.Msg {
+		if m.sftpClient != nil {
+			err := m.sftpClient.Close()
+			if err != nil {
+				log.Printf("Error closing SFTP client: %v", err)
 			}
 		}
-		var files []string
+		if m.sshClient != nil {
+			err := m.sshClient.Close()
+			if err != nil {
+				log.Printf("Error closing SSH client: %v", err)
+			}
+		}
+
+		return m.uploadBackupsMessageCmd(nil)()
+	})
+	log.Printf("Starting Uploads")
+	return tea.Sequence(cmds...)()
+}
+
+func (m UploadBackupsModel) Init() tea.Cmd {
+	files := m.files
+	if len(files) == 0 {
+		entries, err := os.ReadDir(m.tempDir)
+		if err != nil {
+			return m.uploadBackupsMessageCmd(fmt.Errorf("failed to read tempDir: %w", err))
+		}
 		for _, entry := range entries {
 			if !entry.IsDir() {
 				files = append(files, entry.Name())
 			}
 		}
 		if len(files) == 0 {
-			return UploadBackupsMessage{
-				Ok:   false,
-				Errs: []error{fmt.Errorf("no files to upload")},
-			}
+			return m.uploadBackupsMessageCmd(fmt.Errorf("no files to upload"))
 		}
-		m.files = files
-		m.current = 0
-		m.currentFile = files[0]
-		return UploadFileProgressMsg{}
+	}
+
+	return func() tea.Msg {
+		model := m
+		if err := model.connectSSH(); err != nil {
+			return model.uploadBackupsMessageCmd(fmt.Errorf("failed to connect SSH: %w", err))()
+		}
+		return model.startUploadCmd(files)
 	}
 }
 
 func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case UploadFileProgressMsg:
-		if len(m.files) == 0 {
-			entries, _ := os.ReadDir(m.tempDir)
-			for _, entry := range entries {
-				if !entry.IsDir() {
-					m.files = append(m.files, entry.Name())
-				}
-			}
-		}
-
-		// Handle error from previous upload
+	case SetCurrentFileMsg:
+		m.currentFile = msg.File
+		return m, nil
+	case UploadFileResultMsg:
 		if msg.Err != nil {
-			m.errs = append(m.errs, fmt.Errorf("file %s: %w", m.currentFile, msg.Err))
+			m.errs = append(m.errs, msg.Err)
 		}
-		// If done, finish
-		if msg.Done {
-			m.done = true
-			m.success = len(m.errs) == 0
-			return m, func() tea.Msg {
-				return UploadBackupsMessage{
-					Ok:   m.success,
-					Errs: m.errs,
-				}
-			}
-		}
-		// Upload next file
-		if m.current < len(m.files) {
-			fileName := m.files[m.current]
-			m.currentFile = fileName
-			return m, func() tea.Msg {
-				err := uploadSingleFile(m.data, m.tempDir, fileName)
-				m2 := m // copy for closure
-				m2.current++
-				done := m2.current >= len(m2.files)
-				return UploadFileProgressMsg{
-					Err:  err,
-					Done: done,
-				}
-			}
-		}
+		return m, nil
 	case UploadBackupsMessage:
 		m.done = true
 		m.success = msg.Ok
 		m.errs = msg.Errs
-		m.current = len(m.files)
+		return m, nil
 	}
 	return m, nil
 }
@@ -182,11 +214,23 @@ func (m UploadBackupsModel) View() string {
 	var s strings.Builder
 	s.WriteString("\nUpload Backups\n")
 	if !m.done {
-		fmt.Fprintf(&s, "Uploading file %d of %d: %s\n", m.current+1, len(m.files), m.currentFile)
+		currentIdx := 0
+		total := len(m.files)
+		for i, f := range m.files {
+			if f == m.currentFile {
+				currentIdx = i + 1
+				break
+			}
+		}
+		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", currentIdx, total, m.currentFile)
+
 	} else if m.success {
 		s.WriteString("All files uploaded successfully!\n")
 	} else {
 		fmt.Fprintf(&s, "Upload finished with %d errors.\n", len(m.errs))
+		for i, err := range m.errs {
+			fmt.Fprintf(&s, "[%d] %v\n", i, err)
+		}
 	}
 	return s.String()
 }

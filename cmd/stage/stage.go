@@ -10,5 +10,4 @@ const (
 	Files
 	Create
 	Upload
-	Delete
 )

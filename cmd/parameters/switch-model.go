@@ -43,6 +43,7 @@ func (m SwitchModel) View() string {
 	} else {
 		s.WriteString("[ ]")
 	}
+	s.WriteString(" ")
 	s.WriteString(m.prompt)
 
 	return s.String()

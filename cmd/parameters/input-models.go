@@ -7,15 +7,36 @@ import (
 )
 
 type InputData struct {
-	User     string
-	Server   string
-	Password string
-	Debug    bool
-	Commands bool
-	Progress bool
+	User       string
+	Server     string
+	Password   string
+	BackupPath string
+	Debug      bool
+	Commands   bool
+	Progress   bool
 }
 type InputDataMessage struct {
 	Data InputData
+}
+
+func NormalizeBackupPath(path string, user string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return path
+	}
+	if strings.HasPrefix(path, "~") {
+		path = strings.Replace(path, "~", "/home/"+user, 1)
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	for strings.Contains(path, "//") {
+		path = strings.ReplaceAll(path, "//", "/")
+	}
+	if path != "/" && !strings.HasSuffix(path, "/") {
+		path += "/"
+	}
+	return path
 }
 
 func (m InputModel) ParametersDoneCmd() tea.Msg {
@@ -30,6 +51,8 @@ func (m InputModel) ParametersDoneCmd() tea.Msg {
 			data.Server = val
 		case "password":
 			data.Password = val
+		case "backupPath":
+			data.BackupPath = NormalizeBackupPath(val, data.User)
 		}
 	}
 	for _, switchModel := range m.SwitchInputs {
@@ -134,11 +157,12 @@ func InitialParametersInputs() InputModel {
 	textInputs = append(textInputs, InitalTextModel("user", "User: ", "ex: pi", false))
 	textInputs = append(textInputs, InitalTextModel("server", "Server: ", "ex: 192.168.1.1 or raspberrypi", false))
 	textInputs = append(textInputs, InitalTextModel("password", "Password: ", "ex: 1234", true))
+	textInputs = append(textInputs, InitalTextModel("backupPath", "Backup Path: ", "ex: /mnt/backups", false))
 
 	switchInputs := []SwitchModel{}
-	switchInputs = append(switchInputs, InitialSwitchModel("debug", "Debug", false))
+	// switchInputs = append(switchInputs, InitialSwitchModel("debug", "Debug", false))
 	switchInputs = append(switchInputs, InitialSwitchModel("commands", "Print Commands", true))
-	switchInputs = append(switchInputs, InitialSwitchModel("progress", "Show Progress", true))
+	// switchInputs = append(switchInputs, InitialSwitchModel("progress", "Show Progress", true))
 
 	textInputs[0].Ti.Focus()
 

@@ -13,12 +13,11 @@ func _() {
 	_ = x[Files-2]
 	_ = x[Create-3]
 	_ = x[Upload-4]
-	_ = x[Delete-5]
 }
 
-const _Stage_name = "InputCheckFilesCreateUploadDelete"
+const _Stage_name = "InputCheckFilesCreateUpload"
 
-var _Stage_index = [...]uint8{0, 5, 10, 15, 21, 27, 33}
+var _Stage_index = [...]uint8{0, 5, 10, 15, 21, 27}
 
 func (i Stage) String() string {
 	idx := int(i) - 0

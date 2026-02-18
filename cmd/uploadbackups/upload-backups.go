@@ -158,6 +158,13 @@ type UploadBackupsModel struct {
 
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
+
+	// Timing
+	currentUploadStart time.Time
+	totalStartTime     time.Time
+	uploadTimes        []time.Duration
+	creationTimes      []time.Duration
+	creationPaths      []string
 }
 
 func (m *UploadBackupsModel) connectSSH() error {
@@ -299,6 +306,7 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 		m.sftpClient = msg.SFTPClient
 		m.currentIdx = 0
 		m.uploadPct = "0%"
+		m.totalStartTime = time.Now()
 		return m, startNextUploadCmd()
 
 	case StartNextUploadMsg:
@@ -308,6 +316,7 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 		}
 
 		m.currentFile = m.files[m.currentIdx]
+		m.currentUploadStart = time.Now()
 		m.currentIdx++
 		m.uploadPct = "0%"
 		m.runtimeState = &uploadRuntimeState{}
@@ -326,6 +335,8 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 
 		select {
 		case err := <-m.doneCh:
+			duration := time.Since(m.currentUploadStart)
+			m.uploadTimes = append(m.uploadTimes, duration)
 			if err != nil {
 				m.errs = append(m.errs, err)
 			}
@@ -361,6 +372,14 @@ func (m UploadBackupsModel) View() string {
 		s.WriteString(renderProgressBar(m.uploadPct))
 		s.WriteString("\n")
 
+		if !m.currentUploadStart.IsZero() {
+			elapsed := time.Since(m.currentUploadStart)
+			s.WriteString("\n")
+			s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
+			s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
+			s.WriteString("\n")
+		}
+
 	} else if m.success {
 		s.WriteString(styles.SuccessStyle.Render("✓ All files uploaded successfully!"))
 		s.WriteString("\n")
@@ -373,12 +392,83 @@ func (m UploadBackupsModel) View() string {
 			s.WriteString("\n")
 		}
 	}
+
+	if !m.totalStartTime.IsZero() && m.done {
+		totalTime := time.Since(m.totalStartTime)
+		s.WriteString("\n")
+		s.WriteString(styles.TimerLabelStyle.Render("Total time: "))
+		s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", totalTime.Seconds())))
+		s.WriteString("\n")
+		
+		// Combined timing table
+		if len(m.uploadTimes) > 0 || len(m.creationTimes) > 0 {
+			s.WriteString("\n")
+			s.WriteString(styles.SecondaryStyle.Render("File Times"))
+			s.WriteString("\n\n")
+
+			// Header
+			header := fmt.Sprintf("  %-4s  %-32s  %-13s  %s", "#", "File", "Creation", "Upload")
+			s.WriteString(styles.PrimaryStyle.Bold(true).Render(header))
+			s.WriteString("\n")
+			s.WriteString(styles.SecondaryStyle.Render(strings.Repeat("─", 70)))
+			s.WriteString("\n")
+
+			// Determine the number of files to display
+			maxFiles := len(m.files)
+			if len(m.creationTimes) > maxFiles {
+				maxFiles = len(m.creationTimes)
+			}
+			if len(m.uploadTimes) > maxFiles {
+				maxFiles = len(m.uploadTimes)
+			}
+
+			// Rows
+			for i := 0; i < maxFiles; i++ {
+				var fileName string
+				if i < len(m.creationPaths) {
+					fileName = filepath.Base(m.creationPaths[i])
+				} else if i < len(m.files) {
+					fileName = filepath.Base(m.files[i])
+					// Strip -backup.7z suffix if present
+					fileName = strings.TrimSuffix(fileName, "-backup.7z")
+				} else {
+					fileName = fmt.Sprintf("File %d", i+1)
+				}
+				if len(fileName) > 32 {
+					fileName = fileName[:29] + "..."
+				}
+
+				var creationTime, uploadTime string
+				if i < len(m.creationTimes) {
+					creationTime = fmt.Sprintf("%.2fs", m.creationTimes[i].Seconds())
+				} else {
+					creationTime = "-"
+				}
+				if i < len(m.uploadTimes) {
+					uploadTime = fmt.Sprintf("%.2fs", m.uploadTimes[i].Seconds())
+				} else {
+					uploadTime = "-"
+				}
+
+				row := fmt.Sprintf("  %-4d  %-32s  %-13s  %s",
+					i+1,
+					fileName,
+					creationTime,
+					uploadTime)
+				s.WriteString(row)
+				s.WriteString("\n")
+			}
+			s.WriteString("\n")
+		}
+	}
 	return s.String()
 }
 
-func InitialUploadBackupsModel(data parameters.InputData, tempDir string) UploadBackupsModel {
+func InitialUploadBackupsModel(data parameters.InputData, tempDir string, creationTimes []time.Duration, creationPaths []string) UploadBackupsModel {
 	return UploadBackupsModel{
-		data:    data,
-		tempDir: tempDir,
+		data:          data,
+		tempDir:       tempDir,
+		creationTimes: creationTimes,
+		creationPaths: creationPaths,
 	}
 }

@@ -21,8 +21,10 @@ import (
 )
 
 type CreateBackupsMessage struct {
-	Ok   bool
-	Errs []error
+	Ok          bool
+	Errs        []error
+	BackupTimes []time.Duration
+	Paths       []string
 }
 
 func (m *CreateBackupsModel) createBackupsMessageCmd(err error) tea.Cmd {
@@ -32,7 +34,12 @@ func (m *CreateBackupsModel) createBackupsMessageCmd(err error) tea.Cmd {
 	m.done = true
 	m.success = len(m.errs) == 0
 	return func() tea.Msg {
-		return CreateBackupsMessage{Ok: m.success, Errs: m.errs}
+		return CreateBackupsMessage{
+			Ok:          m.success,
+			Errs:        m.errs,
+			BackupTimes: m.backupTimes,
+			Paths:       m.paths,
+		}
 	}
 }
 
@@ -217,6 +224,11 @@ type CreateBackupsModel struct {
 
 	runtimeState *backupRuntimeState
 	doneCh       chan error
+
+	// Timing
+	currentBackupStart time.Time
+	totalStartTime     time.Time
+	backupTimes        []time.Duration
 }
 
 var runningCmd *exec.Cmd
@@ -263,7 +275,12 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 			return m, m.createBackupsMessageCmd(nil)
 		}
 
+		if m.currentIdx == 0 && m.totalStartTime.IsZero() {
+			m.totalStartTime = time.Now()
+		}
+
 		m.currentFile = m.paths[m.currentIdx]
+		m.currentBackupStart = time.Now()
 		return m, tea.Batch(m.backupCmd(m.currentFile), backupTickCmd())
 
 	case BackupTickMsg:
@@ -277,6 +294,8 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 
 		select {
 		case err := <-m.doneCh:
+			duration := time.Since(m.currentBackupStart)
+			m.backupTimes = append(m.backupTimes, duration)
 			m.progressPercent = "0%"
 			if err != nil {
 				m.errs = append(m.errs, err)
@@ -314,6 +333,14 @@ func (m CreateBackupsModel) View() string {
 		s.WriteString(renderProgressBar(m.progressPercent))
 		s.WriteString("\n")
 
+		if !m.currentBackupStart.IsZero() {
+			elapsed := time.Since(m.currentBackupStart)
+			s.WriteString("\n")
+			s.WriteString(styles.TimerLabelStyle.Render("Elapsed: "))
+			s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", elapsed.Seconds())))
+			s.WriteString("\n")
+		}
+
 		if m.data.Commands && m.currentFile != "" {
 			baseName := filepath.Base(m.currentFile)
 			archiveName := baseName + "-backup.7z"
@@ -335,6 +362,46 @@ func (m CreateBackupsModel) View() string {
 		for i, err := range m.errs {
 			s.WriteString(styles.MutedStyle.Render(fmt.Sprintf("[%d] %s: ", i, m.paths[i])))
 			s.WriteString(styles.ErrorStyle.Render(err.Error()))
+			s.WriteString("\n")
+		}
+	}
+
+	if !m.totalStartTime.IsZero() {
+		totalTime := time.Since(m.totalStartTime)
+		s.WriteString("\n")
+		s.WriteString(styles.TimerLabelStyle.Render("Total time: "))
+		s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", totalTime.Seconds())))
+		s.WriteString("\n")
+		if len(m.backupTimes) > 0 {
+			s.WriteString("\n")
+			s.WriteString(styles.SecondaryStyle.Render("Backup Times"))
+			s.WriteString("\n\n")
+
+			// Header
+			header := fmt.Sprintf("  %-4s  %-40s  %s", "#", "File", "Time")
+			s.WriteString(styles.PrimaryStyle.Bold(true).Render(header))
+			s.WriteString("\n")
+			s.WriteString(styles.SecondaryStyle.Render(strings.Repeat("─", 60)))
+			s.WriteString("\n")
+
+			// Rows
+			for i, dur := range m.backupTimes {
+				var fileName string
+				if i < len(m.paths) {
+					fileName = filepath.Base(m.paths[i])
+				} else {
+					fileName = fmt.Sprintf("File %d", i+1)
+				}
+				if len(fileName) > 40 {
+					fileName = fileName[:37] + "..."
+				}
+				row := fmt.Sprintf("  %-4d  %-40s  %s",
+					i+1,
+					fileName,
+					fmt.Sprintf("%.2fs", dur.Seconds()))
+				s.WriteString(row)
+				s.WriteString("\n")
+			}
 			s.WriteString("\n")
 		}
 	}

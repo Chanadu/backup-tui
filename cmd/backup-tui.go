@@ -120,7 +120,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		log.Printf("Created backups:")
 		m.stage++
-		m.uploadBackupsModel = uploadbackups.InitialUploadBackupsModel(m.paramsData, m.tempDir)
+		m.uploadBackupsModel = uploadbackups.InitialUploadBackupsModel(m.paramsData, m.tempDir, msg.BackupTimes, msg.Paths)
 		return m, m.uploadBackupsModel.Init()
 
 	case uploadbackups.UploadBackupsMessage:
@@ -154,6 +154,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
+	s.WriteString("\n")
+	s.WriteString(styles.AppTitleStyle.Render("BETTER-TUI"))
 	s.WriteString("\n")
 	s.WriteString(styles.TitleStyle.Render(m.stageTitle()))
 	s.WriteString("\n")

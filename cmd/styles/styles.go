@@ -12,6 +12,12 @@ var (
 	Muted     = lipgloss.Color("243") // Gray
 	Info      = lipgloss.Color("86")  // Cyan
 
+	// App title styles
+	AppTitleStyle = lipgloss.NewStyle().
+			Foreground(Primary).
+			Bold(true).
+			MarginBottom(1)
+
 	// Header styles
 	TitleStyle = lipgloss.NewStyle().
 			Foreground(Primary).
@@ -44,10 +50,20 @@ var (
 	SecondaryStyle = lipgloss.NewStyle().
 			Foreground(Secondary).
 			Bold(true)
+
 	// Interactive styles
 	HelpStyle = lipgloss.NewStyle().
 			Foreground(Muted).
 			MarginTop(1)
+
+	// Timer/Stopwatch styles
+	TimerStyle = lipgloss.NewStyle().
+			Foreground(Info).
+			Bold(true)
+
+	TimerLabelStyle = lipgloss.NewStyle().
+				Foreground(Secondary)
+
 	// Progress styles
 	ProgressLabelStyle = lipgloss.NewStyle().
 				Foreground(Secondary).

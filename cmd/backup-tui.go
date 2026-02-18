@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/checkserver"
+	"github.com/Chanadu/backup-tui/cmd/config"
 	"github.com/Chanadu/backup-tui/cmd/createbackups"
 	"github.com/Chanadu/backup-tui/cmd/getfiles"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
@@ -94,6 +95,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.checkModel = checkserver.InitialCheckServerModel(m.paramsData)
 		log.Printf("Input Data Collected: %v, %s", m.paramsData, m.stage)
 		m.inputsModel.SetCurrentIndex(0)
+		// Save parameters to config (password is not saved)
+		err := config.SaveConfig(m.paramsData.User, m.paramsData.Server, m.paramsData.BackupPath, m.paramsData.Debug, m.paramsData.Commands, m.paramsData.Progress)
+		if err != nil {
+			log.Printf("Failed to save config: %v", err)
+		}
 		return m, m.checkModel.Init()
 	case checkserver.CheckServerMessage:
 		if msg.Ok {

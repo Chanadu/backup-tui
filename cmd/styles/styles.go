@@ -4,10 +4,10 @@ import "github.com/charmbracelet/lipgloss"
 
 var (
 	// Colors
-	PurpleDeep   = lipgloss.Color("#8B6BB8")
-	PurpleMid    = lipgloss.Color("#9B7BE6")
-	PurpleLight  = lipgloss.Color("#BDA7FF")
-	PurplePale   = lipgloss.Color("#DDD2FF")
+	PurpleDeep  = lipgloss.Color("#8B6BB8")
+	PurpleMid   = lipgloss.Color("#9B7BE6")
+	PurpleLight = lipgloss.Color("#BDA7FF")
+	PurplePale  = lipgloss.Color("#DDD2FF")
 
 	Primary   = PurpleDeep
 	Secondary = PurpleLight

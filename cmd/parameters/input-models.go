@@ -3,6 +3,7 @@ package parameters
 import (
 	"strings"
 
+	"github.com/Chanadu/backup-tui/cmd/config"
 	"github.com/Chanadu/backup-tui/cmd/styles"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -155,15 +156,29 @@ func (m InputModel) View() string {
 }
 
 func InitialParametersInputs() InputModel {
+	// Load saved config
+	savedConfig := config.LoadConfig()
+
 	textInputs := []TextModel{}
 	textInputs = append(textInputs, InitalTextModel("user", "User: ", "ex: pi", false))
 	textInputs = append(textInputs, InitalTextModel("server", "Server: ", "ex: 192.168.1.1 or raspberrypi", false))
 	textInputs = append(textInputs, InitalTextModel("password", "Password: ", "ex: 1234", true))
 	textInputs = append(textInputs, InitalTextModel("backupPath", "Backup Path: ", "ex: /mnt/backups", false))
 
+	// Populate text inputs with saved values
+	if savedConfig.User != "" {
+		textInputs[0].Ti.SetValue(savedConfig.User)
+	}
+	if savedConfig.Server != "" {
+		textInputs[1].Ti.SetValue(savedConfig.Server)
+	}
+	if savedConfig.BackupPath != "" {
+		textInputs[3].Ti.SetValue(savedConfig.BackupPath)
+	}
+
 	switchInputs := []SwitchModel{}
 	// switchInputs = append(switchInputs, InitialSwitchModel("debug", "Debug", false))
-	switchInputs = append(switchInputs, InitialSwitchModel("commands", "Print Commands", true))
+	switchInputs = append(switchInputs, InitialSwitchModel("commands", "Print Commands", savedConfig.Commands))
 	// switchInputs = append(switchInputs, InitialSwitchModel("progress", "Show Progress", true))
 
 	textInputs[0].Ti.Focus()

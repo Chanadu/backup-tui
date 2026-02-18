@@ -30,7 +30,7 @@ func percentToFraction(percent string) float64 {
 func renderProgressBar(percent string) string {
 	bar := progress.New(
 		progress.WithWidth(40),
-		progress.WithGradient(string(styles.Secondary), string(styles.Primary)),
+		progress.WithGradient(styles.ProgressGradientFromHex, styles.ProgressGradientToHex),
 	)
 	return bar.ViewAs(percentToFraction(percent))
 }

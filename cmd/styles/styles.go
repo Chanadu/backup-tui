@@ -12,6 +12,10 @@ var (
 	Muted     = lipgloss.Color("243") // Gray
 	Info      = lipgloss.Color("86")  // Cyan
 
+	// Progress gradient (hex values are required by bubbles/progress gradient parser)
+	ProgressGradientFromHex = "#00D7D7"
+	ProgressGradientToHex   = "#FF5FD7"
+
 	// App title styles
 	AppTitleStyle = lipgloss.NewStyle().
 			Foreground(Primary).

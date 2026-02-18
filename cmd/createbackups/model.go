@@ -1,216 +1,19 @@
 package createbackups
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/styles"
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type CreateBackupsMessage struct {
-	Ok          bool
-	Errs        []error
-	BackupTimes []time.Duration
-	Paths       []string
-}
-
-func (m *CreateBackupsModel) createBackupsMessageCmd(err error) tea.Cmd {
-	if err != nil {
-		m.errs = append(m.errs, err)
-	}
-	m.done = true
-	m.success = len(m.errs) == 0
-	return func() tea.Msg {
-		return CreateBackupsMessage{
-			Ok:          m.success,
-			Errs:        m.errs,
-			BackupTimes: m.backupTimes,
-			Paths:       m.paths,
-		}
-	}
-}
-
-type StartNextBackupMsg struct{}
-
-type BackupTickMsg struct{}
-
-type backupRuntimeState struct {
-	mu      sync.Mutex
-	percent string
-}
-
-var percentRegex = regexp.MustCompile(`(\d+)%`)
-
-func percentToFraction(percent string) float64 {
-	percent = strings.TrimSuffix(strings.TrimSpace(percent), "%")
-	value, err := strconv.Atoi(percent)
-	if err != nil {
-		return 0
-	}
-	if value < 0 {
-		value = 0
-	}
-	if value > 100 {
-		value = 100
-	}
-	return float64(value) / 100
-}
-
-func renderProgressBar(percent string) string {
-	bar := progress.New(
-		progress.WithWidth(40),
-		progress.WithGradient(string(styles.Secondary), string(styles.Primary)),
-	)
-	return bar.ViewAs(percentToFraction(percent))
-}
-
-func startNextBackupCmd() tea.Cmd {
-	return func() tea.Msg {
-		return StartNextBackupMsg{}
-	}
-}
-
-func backupTickCmd() tea.Cmd {
-	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg {
-		return BackupTickMsg{}
-	})
-}
-
-func (s *backupRuntimeState) snapshot() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.percent
-}
-
-func (s *backupRuntimeState) updateWithLine(line string) {
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if match := percentRegex.FindStringSubmatch(line); len(match) > 1 {
-		s.percent = match[1] + "%"
-	}
-}
-
-func consume7zStream(reader io.Reader, state *backupRuntimeState) {
-	bufReader := bufio.NewReader(reader)
-	var builder strings.Builder
-
-	flush := func() {
-		line := builder.String()
-		builder.Reset()
-		state.updateWithLine(line)
-	}
-
-	updateFromBuffer := func() {
-		if builder.Len() == 0 {
-			return
-		}
-		state.updateWithLine(builder.String())
-	}
-
-	for {
-		b, err := bufReader.ReadByte()
-		if err != nil {
-			if builder.Len() > 0 {
-				flush()
-			}
-			return
-		}
-
-		if b == '\n' || b == '\r' || b == '\b' {
-			flush()
-			continue
-		}
-
-		_ = builder.WriteByte(b)
-		if builder.Len() > 512 {
-			buffer := builder.String()
-			builder.Reset()
-			if len(buffer) > 256 {
-				buffer = buffer[len(buffer)-256:]
-			}
-			_, _ = builder.WriteString(buffer)
-		}
-		updateFromBuffer()
-	}
-}
-
-func run7zBackup(filePath string, tempDir string, state *backupRuntimeState, doneCh chan error) {
-	baseName := filepath.Base(filePath)
-	archiveName := baseName + "-backup.7z"
-	archivePath := filepath.Join(tempDir, archiveName)
-	log.Printf("Creating archive for %s at %s", filePath, archivePath)
-
-	cmd := exec.Command("7z", "a", "-mx=9", "-bsp1", archivePath, filePath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		doneCh <- fmt.Errorf("failed to setup 7z stdout: %v", err)
-		return
-	}
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		doneCh <- fmt.Errorf("failed to setup 7z stderr: %v", err)
-		return
-	}
-
-	log.Printf("Executing command: %s", strings.Join(cmd.Args, " "))
-
-	if err := cmd.Start(); err != nil {
-		doneCh <- fmt.Errorf("failed to start 7z: %v", err)
-		return
-	}
-
-	log.Printf("Started 7z process with PID %d", cmd.Process.Pid)
-	runningCmd = cmd
-	log.Printf("Waiting for process to finish for %s", filePath)
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		consume7zStream(stdout, state)
-	}()
-
-	go func() {
-		defer wg.Done()
-		consume7zStream(stderr, state)
-	}()
-
-	err = cmd.Wait()
-	wg.Wait()
-
-	if err != nil {
-		log.Printf("7z command returned non-zero status for %s (treated as warning): %v", filePath, err)
-		doneCh <- nil
-		return
-	}
-
-	doneCh <- err
-}
-
+// CreateBackupsModel manages the backup creation stage
 type CreateBackupsModel struct {
 	data        parameters.InputData
 	tempDir     string
@@ -231,22 +34,6 @@ type CreateBackupsModel struct {
 	currentBackupStart time.Time
 	totalStartTime     time.Time
 	backupTimes        []time.Duration
-}
-
-var runningCmd *exec.Cmd
-
-func (m *CreateBackupsModel) KillProcess() {
-	log.Printf("KillProcess called: runningCmd=%v", runningCmd)
-	if runningCmd != nil && runningCmd.Process != nil {
-		pgid, err := syscall.Getpgid(runningCmd.Process.Pid)
-		if err == nil {
-			log.Printf("Killing process group %d", pgid)
-			_ = syscall.Kill(-pgid, syscall.SIGKILL)
-		} else {
-			log.Printf("Killing process PID %d", runningCmd.Process.Pid)
-			_ = runningCmd.Process.Kill()
-		}
-	}
 }
 
 func (m *CreateBackupsModel) backupCmd(filePath string) tea.Cmd {
@@ -415,6 +202,7 @@ func (m CreateBackupsModel) View() string {
 	return s.String()
 }
 
+// InitialCreateBackupsModel creates a new CreateBackupsModel with initial state
 func InitialCreateBackupsModel(data parameters.InputData, paths []string, tempDir string) CreateBackupsModel {
 	s := spinner.New()
 	s.Spinner = spinner.Points

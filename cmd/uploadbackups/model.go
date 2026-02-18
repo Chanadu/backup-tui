@@ -2,146 +2,20 @@ package uploadbackups
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"os"
-	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/styles"
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
-type UploadBackupsMessage struct {
-	Ok   bool
-	Errs []error
-}
-
-func (m *UploadBackupsModel) uploadBackupsMessageCmd(err error) tea.Cmd {
-	if err != nil {
-		m.errs = append(m.errs, err)
-	}
-
-	m.done = true
-	m.success = len(m.errs) == 0
-
-	return func() tea.Msg {
-		return UploadBackupsMessage{Ok: m.success, Errs: m.errs}
-	}
-}
-
-type SetCurrentFileMsg struct {
-	File  string
-	Index int
-	Total int
-}
-
-type UploadFileResultMsg struct {
-	Err error
-}
-
-type UploadReadyMsg struct {
-	Files      []string
-	SSHClient  *ssh.Client
-	SFTPClient *sftp.Client
-}
-
-type StartNextUploadMsg struct{}
-
-type UploadTickMsg struct{}
-
-type uploadRuntimeState struct {
-	mu           sync.Mutex
-	totalBytes   int64
-	uploadedByte int64
-}
-
-type progressReader struct {
-	reader io.Reader
-	state  *uploadRuntimeState
-}
-
-func percentToFraction(percent string) float64 {
-	percent = strings.TrimSuffix(strings.TrimSpace(percent), "%")
-	value, err := strconv.Atoi(percent)
-	if err != nil {
-		return 0
-	}
-	if value < 0 {
-		value = 0
-	}
-	if value > 100 {
-		value = 100
-	}
-	return float64(value) / 100
-}
-
-func renderProgressBar(percent string) string {
-	bar := progress.New(
-		progress.WithWidth(40),
-		progress.WithGradient(string(styles.Secondary), string(styles.Primary)),
-	)
-	return bar.ViewAs(percentToFraction(percent))
-}
-
-func (r *progressReader) Read(p []byte) (int, error) {
-	n, err := r.reader.Read(p)
-	if n > 0 {
-		r.state.addUploaded(int64(n))
-	}
-	return n, err
-}
-
-func (s *uploadRuntimeState) setTotal(total int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.totalBytes = total
-	s.uploadedByte = 0
-}
-
-func (s *uploadRuntimeState) addUploaded(n int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.uploadedByte += n
-	if s.uploadedByte > s.totalBytes {
-		s.uploadedByte = s.totalBytes
-	}
-}
-
-func (s *uploadRuntimeState) percent() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.totalBytes <= 0 {
-		return "0%"
-	}
-	percent := int((s.uploadedByte * 100) / s.totalBytes)
-	if percent > 100 {
-		percent = 100
-	}
-	return fmt.Sprintf("%d%%", percent)
-}
-
-func startNextUploadCmd() tea.Cmd {
-	return func() tea.Msg {
-		return StartNextUploadMsg{}
-	}
-}
-
-func uploadTickCmd() tea.Cmd {
-	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg {
-		return UploadTickMsg{}
-	})
-}
-
+// UploadBackupsModel manages the upload stage
 type UploadBackupsModel struct {
 	data        parameters.InputData
 	tempDir     string
@@ -167,110 +41,6 @@ type UploadBackupsModel struct {
 	uploadTimes        []time.Duration
 	creationTimes      []time.Duration
 	creationPaths      []string
-}
-
-func (m *UploadBackupsModel) connectSSH() error {
-	config := &ssh.ClientConfig{
-		User: m.data.User,
-		Auth: []ssh.AuthMethod{
-			ssh.Password(m.data.Password),
-		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * 1e9,
-	}
-	client, err := ssh.Dial("tcp", m.data.Server+":22", config)
-	if err != nil {
-		return err
-	}
-	sftpClient, err := sftp.NewClient(client)
-	if err != nil {
-		defer func() {
-			err := client.Close()
-			if err != nil {
-				log.Printf("Error closing SSH client: %v", err)
-			}
-		}()
-		return fmt.Errorf("failed to start SFTP: %v", err)
-	}
-	m.sshClient = client
-	m.sftpClient = sftpClient
-	return nil
-}
-
-func (m *UploadBackupsModel) uploadSingleFile(fileName string, state *uploadRuntimeState) error {
-	if m.sftpClient == nil {
-		return fmt.Errorf("SFTP client not initialized")
-	}
-
-	localPath := filepath.Join(m.tempDir, fileName)
-	remotePath := path.Join(m.data.BackupPath, fileName)
-
-	log.Printf("Uploading file: local=%s remote=%s", localPath, remotePath)
-
-	srcFile, err := os.Open(localPath)
-	if err != nil {
-		return fmt.Errorf("failed to open local file %s: %v", localPath, err)
-	}
-	defer func() {
-		err := srcFile.Close()
-		if err != nil {
-			log.Printf("Error closing local file %s: %v", localPath, err)
-		}
-	}()
-
-	fileInfo, err := srcFile.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to stat local file %s: %v", localPath, err)
-	}
-	state.setTotal(fileInfo.Size())
-
-	dstFile, err := m.sftpClient.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
-	if err != nil {
-		return fmt.Errorf("failed to open remote file %s: %v", remotePath, err)
-	}
-	defer func() {
-		err := dstFile.Close()
-		if err != nil {
-			log.Printf("Error closing remote file %s: %v", remotePath, err)
-		}
-	}()
-
-	_, err = io.Copy(dstFile, &progressReader{reader: srcFile, state: state})
-	if err != nil {
-		return fmt.Errorf("failed to copy file %s: %w", fileName, err)
-	}
-	log.Printf("Successfully uploaded file: %s", fileName)
-	return nil
-}
-
-func uploadFileCmd(m UploadBackupsModel, file string, state *uploadRuntimeState, doneCh chan error) tea.Cmd {
-	return func() tea.Msg {
-		go func() {
-			err := m.uploadSingleFile(file, state)
-			if err != nil {
-				log.Printf("Error uploading file %s: %v", file, err)
-			}
-			doneCh <- err
-		}()
-		return nil
-	}
-}
-
-func (m *UploadBackupsModel) closeConnections() {
-	if m.sftpClient != nil {
-		err := m.sftpClient.Close()
-		if err != nil {
-			log.Printf("Error closing SFTP client: %v", err)
-		}
-		m.sftpClient = nil
-	}
-	if m.sshClient != nil {
-		err := m.sshClient.Close()
-		if err != nil {
-			log.Printf("Error closing SSH client: %v", err)
-		}
-		m.sshClient = nil
-	}
 }
 
 func (m UploadBackupsModel) Init() tea.Cmd {
@@ -471,6 +241,7 @@ func (m UploadBackupsModel) View() string {
 	return s.String()
 }
 
+// InitialUploadBackupsModel creates a new UploadBackupsModel with initial state
 func InitialUploadBackupsModel(data parameters.InputData, tempDir string, creationTimes []time.Duration, creationPaths []string) UploadBackupsModel {
 	s := spinner.New()
 	s.Spinner = spinner.Points

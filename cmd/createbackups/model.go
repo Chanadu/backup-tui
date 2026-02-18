@@ -120,7 +120,7 @@ func (m CreateBackupsModel) View() string {
 		label := fmt.Sprintf("[%d/%d] Creating backup for:", currentIdx, total)
 		s.WriteString(styles.ProgressLabelStyle.Render(label))
 		s.WriteString(" ")
-		s.WriteString(m.currentFile)
+		s.WriteString(styles.InfoStyle.Render(m.currentFile))
 		s.WriteString("\n\n")
 		s.WriteString(m.spinner.View())
 		s.WriteString(" ")

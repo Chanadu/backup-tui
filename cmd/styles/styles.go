@@ -4,9 +4,14 @@ import "github.com/charmbracelet/lipgloss"
 
 var (
 	// Colors
-	Primary   = lipgloss.Color("212") // Pink
-	Secondary = lipgloss.Color("183") // Light Purple
-	Success   = lipgloss.Color("42")  // Green
+	PurpleDeep   = lipgloss.Color("#8B6BB8")
+	PurpleMid    = lipgloss.Color("#9B7BE6")
+	PurpleLight  = lipgloss.Color("#BDA7FF")
+	PurplePale   = lipgloss.Color("#DDD2FF")
+
+	Primary   = PurpleDeep
+	Secondary = PurpleLight
+	Success   = lipgloss.Color("51")  // Cyan-ish
 	Warning   = lipgloss.Color("214") // Orange
 	Error     = lipgloss.Color("196") // Red
 	Muted     = lipgloss.Color("243") // Gray
@@ -18,13 +23,13 @@ var (
 
 	// App title styles
 	AppTitleStyle = lipgloss.NewStyle().
-			Foreground(Primary).
+			Foreground(Info).
 			Bold(true).
 			MarginBottom(1)
 
 	// Header styles
 	TitleStyle = lipgloss.NewStyle().
-			Foreground(Primary).
+			Foreground(PurpleMid).
 			Bold(true).
 			Padding(0, 1).
 			MarginBottom(1)
@@ -48,11 +53,11 @@ var (
 			Foreground(Muted)
 
 	PrimaryStyle = lipgloss.NewStyle().
-			Foreground(Primary).
+			Foreground(PurpleDeep).
 			Bold(true)
 
 	SecondaryStyle = lipgloss.NewStyle().
-			Foreground(Secondary).
+			Foreground(PurpleLight).
 			Bold(true)
 
 	// Interactive styles
@@ -66,21 +71,21 @@ var (
 			Bold(true)
 
 	TimerLabelStyle = lipgloss.NewStyle().
-			Foreground(Secondary)
+			Foreground(PurplePale)
 
 	// Progress styles
 	ProgressLabelStyle = lipgloss.NewStyle().
-				Foreground(Secondary).
+				Foreground(PurpleMid).
 				Bold(true)
 
 	// Box/Border styles
 	BoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(Secondary).
+			BorderForeground(PurpleMid).
 			Padding(1, 2)
 
 	SubtleBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			BorderForeground(Muted).
+			BorderForeground(PurpleLight).
 			Padding(0, 1)
 )

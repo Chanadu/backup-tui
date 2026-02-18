@@ -42,6 +42,12 @@ func (s *uploadRuntimeState) percent() string {
 	return fmt.Sprintf("%d%%", percent)
 }
 
+func (s *uploadRuntimeState) uploadedBytes() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.uploadedByte
+}
+
 // progressReader wraps an io.Reader to track upload progress
 type progressReader struct {
 	reader io.Reader

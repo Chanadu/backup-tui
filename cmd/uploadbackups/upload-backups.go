@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	tea "github.com/charmbracelet/bubbletea"
@@ -43,7 +45,75 @@ type UploadFileResultMsg struct {
 	Err error
 }
 
-type UploadFinishedMsg struct{}
+type UploadReadyMsg struct {
+	Files      []string
+	SSHClient  *ssh.Client
+	SFTPClient *sftp.Client
+}
+
+type StartNextUploadMsg struct{}
+
+type UploadTickMsg struct{}
+
+type uploadRuntimeState struct {
+	mu           sync.Mutex
+	totalBytes   int64
+	uploadedByte int64
+}
+
+type progressReader struct {
+	reader io.Reader
+	state  *uploadRuntimeState
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		r.state.addUploaded(int64(n))
+	}
+	return n, err
+}
+
+func (s *uploadRuntimeState) setTotal(total int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.totalBytes = total
+	s.uploadedByte = 0
+}
+
+func (s *uploadRuntimeState) addUploaded(n int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.uploadedByte += n
+	if s.uploadedByte > s.totalBytes {
+		s.uploadedByte = s.totalBytes
+	}
+}
+
+func (s *uploadRuntimeState) percent() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.totalBytes <= 0 {
+		return "0%"
+	}
+	percent := int((s.uploadedByte * 100) / s.totalBytes)
+	if percent > 100 {
+		percent = 100
+	}
+	return fmt.Sprintf("%d%%", percent)
+}
+
+func startNextUploadCmd() tea.Cmd {
+	return func() tea.Msg {
+		return StartNextUploadMsg{}
+	}
+}
+
+func uploadTickCmd() tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(time.Time) tea.Msg {
+		return UploadTickMsg{}
+	})
+}
 
 type UploadBackupsModel struct {
 	data        parameters.InputData
@@ -55,6 +125,10 @@ type UploadBackupsModel struct {
 	currentFile string
 	currentIdx  int
 	totalFiles  int
+	uploadPct   string
+
+	runtimeState *uploadRuntimeState
+	doneCh       chan error
 
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
@@ -88,7 +162,7 @@ func (m *UploadBackupsModel) connectSSH() error {
 	return nil
 }
 
-func (m *UploadBackupsModel) uploadSingleFile(fileName string) error {
+func (m *UploadBackupsModel) uploadSingleFile(fileName string, state *uploadRuntimeState) error {
 	if m.sftpClient == nil {
 		return fmt.Errorf("SFTP client not initialized")
 	}
@@ -109,6 +183,12 @@ func (m *UploadBackupsModel) uploadSingleFile(fileName string) error {
 		}
 	}()
 
+	fileInfo, err := srcFile.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat local file %s: %v", localPath, err)
+	}
+	state.setTotal(fileInfo.Size())
+
 	dstFile, err := m.sftpClient.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 	if err != nil {
 		return fmt.Errorf("failed to open remote file %s: %v", remotePath, err)
@@ -120,7 +200,7 @@ func (m *UploadBackupsModel) uploadSingleFile(fileName string) error {
 		}
 	}()
 
-	_, err = io.Copy(dstFile, srcFile)
+	_, err = io.Copy(dstFile, &progressReader{reader: srcFile, state: state})
 	if err != nil {
 		return fmt.Errorf("failed to copy file %s: %w", fileName, err)
 	}
@@ -128,48 +208,34 @@ func (m *UploadBackupsModel) uploadSingleFile(fileName string) error {
 	return nil
 }
 
-func setCurrentFileCmd(file string, index int, total int) tea.Cmd {
+func uploadFileCmd(m UploadBackupsModel, file string, state *uploadRuntimeState, doneCh chan error) tea.Cmd {
 	return func() tea.Msg {
-		return SetCurrentFileMsg{File: file, Index: index, Total: total}
+		go func() {
+			err := m.uploadSingleFile(file, state)
+			if err != nil {
+				log.Printf("Error uploading file %s: %v", file, err)
+			}
+			doneCh <- err
+		}()
+		return nil
 	}
 }
 
-func uploadFileCmd(m UploadBackupsModel, file string) tea.Cmd {
-	return func() tea.Msg {
-		err := m.uploadSingleFile(file)
+func (m *UploadBackupsModel) closeConnections() {
+	if m.sftpClient != nil {
+		err := m.sftpClient.Close()
 		if err != nil {
-			log.Printf("Error uploading file %s: %v", file, err)
+			log.Printf("Error closing SFTP client: %v", err)
 		}
-		return UploadFileResultMsg{Err: err}
+		m.sftpClient = nil
 	}
-}
-
-func (m UploadBackupsModel) startUploadCmd(files []string) tea.Msg {
-	var cmds []tea.Cmd
-
-	total := len(files)
-	for i, file := range files {
-		cmds = append(cmds, setCurrentFileCmd(file, i+1, total))
-		cmds = append(cmds, uploadFileCmd(m, file))
+	if m.sshClient != nil {
+		err := m.sshClient.Close()
+		if err != nil {
+			log.Printf("Error closing SSH client: %v", err)
+		}
+		m.sshClient = nil
 	}
-	cmds = append(cmds, func() tea.Msg {
-		if m.sftpClient != nil {
-			err := m.sftpClient.Close()
-			if err != nil {
-				log.Printf("Error closing SFTP client: %v", err)
-			}
-		}
-		if m.sshClient != nil {
-			err := m.sshClient.Close()
-			if err != nil {
-				log.Printf("Error closing SSH client: %v", err)
-			}
-		}
-
-		return UploadFinishedMsg{}
-	})
-	log.Printf("Starting Uploads")
-	return tea.Sequence(cmds...)()
 }
 
 func (m UploadBackupsModel) Init() tea.Cmd {
@@ -194,24 +260,61 @@ func (m UploadBackupsModel) Init() tea.Cmd {
 		if err := model.connectSSH(); err != nil {
 			return model.uploadBackupsMessageCmd(fmt.Errorf("failed to connect SSH: %w", err))()
 		}
-		return model.startUploadCmd(files)
+		return UploadReadyMsg{Files: files, SSHClient: model.sshClient, SFTPClient: model.sftpClient}
 	}
 }
 
 func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case SetCurrentFileMsg:
-		m.currentFile = msg.File
-		m.currentIdx = msg.Index
-		m.totalFiles = msg.Total
-		return m, nil
+	case UploadReadyMsg:
+		m.files = msg.Files
+		m.totalFiles = len(msg.Files)
+		m.sshClient = msg.SSHClient
+		m.sftpClient = msg.SFTPClient
+		m.currentIdx = 0
+		m.uploadPct = "0%"
+		return m, startNextUploadCmd()
+
+	case StartNextUploadMsg:
+		if m.currentIdx >= len(m.files) {
+			m.closeConnections()
+			return m, m.uploadBackupsMessageCmd(nil)
+		}
+
+		m.currentFile = m.files[m.currentIdx]
+		m.currentIdx++
+		m.uploadPct = "0%"
+		m.runtimeState = &uploadRuntimeState{}
+		m.doneCh = make(chan error, 1)
+
+		return m, tea.Batch(uploadFileCmd(m, m.currentFile, m.runtimeState, m.doneCh), uploadTickCmd())
+
+	case UploadTickMsg:
+		if m.runtimeState != nil {
+			m.uploadPct = m.runtimeState.percent()
+		}
+
+		if m.doneCh == nil {
+			return m, nil
+		}
+
+		select {
+		case err := <-m.doneCh:
+			if err != nil {
+				m.errs = append(m.errs, err)
+			}
+			m.uploadPct = "0%"
+			return m, startNextUploadCmd()
+		default:
+			return m, uploadTickCmd()
+		}
+
 	case UploadFileResultMsg:
 		if msg.Err != nil {
 			m.errs = append(m.errs, msg.Err)
 		}
 		return m, nil
-	case UploadFinishedMsg:
-		return m, m.uploadBackupsMessageCmd(nil)
+
 	case UploadBackupsMessage:
 		m.done = true
 		m.success = msg.Ok
@@ -226,6 +329,7 @@ func (m UploadBackupsModel) View() string {
 	s.WriteString("\nUpload Backups\n")
 	if !m.done {
 		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", m.currentIdx, m.totalFiles, m.currentFile)
+		fmt.Fprintf(&s, "Progress: %s\n", m.uploadPct)
 
 	} else if m.success {
 		s.WriteString("All files uploaded successfully!\n")

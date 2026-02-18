@@ -39,7 +39,8 @@ func initialFilePicker(dir string) filepicker.Model {
 	fp.FileAllowed = true
 	fp.ShowPermissions = false
 	fp.ShowSize = true
-	fp.SetHeight(10)
+	fp.SetHeight(5)
+	fp.SetMaxHeight(5)
 
 	fp.KeyMap.Up.SetKeys("up", "ctrl+k")
 	fp.KeyMap.Down.SetKeys("down", "ctrl+j")

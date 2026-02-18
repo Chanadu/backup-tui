@@ -18,6 +18,7 @@ import (
 
 type model struct {
 	stage stage.Stage
+	width int
 
 	inputsModel parameters.InputModel
 	paramsData  parameters.InputData
@@ -76,6 +77,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
 
 	case tea.KeyMsg:
 		strMsg := msg.String()
@@ -154,7 +157,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
-	s.WriteString("\n")
 	s.WriteString(styles.AppTitleStyle.Render("BETTER-TUI"))
 	s.WriteString("\n")
 	s.WriteString(styles.TitleStyle.Render(m.stageTitle()))
@@ -175,7 +177,12 @@ func (m model) View() string {
 	s.WriteString("\n")
 	s.WriteString(styles.HelpStyle.Render("Press Ctrl+C to quit."))
 
-	return s.String()
+	box := styles.BoxStyle
+	if m.width > 6 {
+		box = box.Width(m.width - 6)
+	}
+
+	return "\n" + box.Render(s.String())
 }
 
 func initialModel(tempDir string) model {

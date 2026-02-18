@@ -165,6 +165,7 @@ type Model struct {
 	// Deprecated: use [Model.SetHeight] instead.
 	Height     int
 	AutoHeight bool
+	MaxHeight  int
 
 	Cursor string
 	Styles Styles
@@ -246,6 +247,17 @@ func (m *Model) SetHeight(height int) {
 	}
 }
 
+// SetMaxHeight sets the maximum height the filepicker can grow to when AutoHeight is enabled.
+func (m *Model) SetMaxHeight(maxHeight int) {
+	m.MaxHeight = maxHeight
+	if m.MaxHeight > 0 && m.Height > m.MaxHeight {
+		m.Height = m.MaxHeight
+	}
+	if m.max > m.Height-1 {
+		m.max = m.min + m.Height - 1
+	}
+}
+
 // Update handles user interactions within the file picker model.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -258,6 +270,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		if m.AutoHeight {
 			m.Height = msg.Height - marginBottom
+			if m.MaxHeight > 0 && m.Height > m.MaxHeight {
+				m.Height = m.MaxHeight
+			}
+			if m.Height < 1 {
+				m.Height = 1
+			}
 		}
 		m.max = m.Height - 1
 	case tea.KeyMsg:

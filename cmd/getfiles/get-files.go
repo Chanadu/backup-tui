@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/getfiles/filepicker"
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/Chanadu/backup-tui/cmd/utils"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -188,12 +189,13 @@ func (m FileSelectorModel) View() string {
 	var s strings.Builder
 
 	if !m.Prompting {
-		s.WriteString("Search: ")
+		s.WriteString(styles.SecondaryStyle.Render("Search: "))
 		s.WriteString(m.Search.View())
 		s.WriteString("\n")
 	}
 
-	s.WriteString("Selected:\n")
+	s.WriteString(styles.SecondaryStyle.Render("Selected:"))
+	s.WriteString("\n")
 
 	renders := []string{}
 	for _, path := range m.SelectedPaths {
@@ -206,14 +208,16 @@ func (m FileSelectorModel) View() string {
 	}
 	s.WriteString("\n")
 	if m.UsingFilteredDir {
-		s.WriteString("(Filtered View)\n")
+		s.WriteString(styles.WarningStyle.Render("(Filtered View)"))
+		s.WriteString("\n")
 
 	}
 
 	if m.Done {
-		s.WriteString("File selection complete.")
+		s.WriteString(styles.SuccessStyle.Render("✓ File selection complete."))
 	} else if m.Prompting {
-		s.WriteString("Pick another file? (y/n)\n")
+		s.WriteString(styles.HelpStyle.Render("Pick another file? (y/n)"))
+		s.WriteString("\n")
 	} else {
 		s.WriteString(m.Picker.View())
 	}

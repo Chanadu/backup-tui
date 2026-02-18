@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pkg/sftp"
@@ -84,7 +85,10 @@ func percentToFraction(percent string) float64 {
 }
 
 func renderProgressBar(percent string) string {
-	bar := progress.New(progress.WithWidth(40))
+	bar := progress.New(
+		progress.WithWidth(40),
+		progress.WithGradient(string(styles.Secondary), string(styles.Primary)),
+	)
 	return bar.ViewAs(percentToFraction(percent))
 }
 
@@ -349,15 +353,24 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 func (m UploadBackupsModel) View() string {
 	var s strings.Builder
 	if !m.done {
-		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", m.currentIdx, m.totalFiles, m.currentFile)
-		fmt.Fprintf(&s, "%s\n", renderProgressBar(m.uploadPct))
+		label := fmt.Sprintf("[%d/%d] Uploading:", m.currentIdx, m.totalFiles)
+		s.WriteString(styles.ProgressLabelStyle.Render(label))
+		s.WriteString("  ")
+		s.WriteString(m.currentFile)
+		s.WriteString("\n")
+		s.WriteString(renderProgressBar(m.uploadPct))
+		s.WriteString("\n")
 
 	} else if m.success {
-		s.WriteString("All files uploaded successfully!\n")
+		s.WriteString(styles.SuccessStyle.Render("✓ All files uploaded successfully!"))
+		s.WriteString("\n")
 	} else {
-		fmt.Fprintf(&s, "Upload finished with %d errors.\n", len(m.errs))
+		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("✗ Upload finished with %d errors.", len(m.errs))))
+		s.WriteString("\n")
 		for i, err := range m.errs {
-			fmt.Fprintf(&s, "[%d] %v\n", i, err)
+			s.WriteString(styles.MutedStyle.Render(fmt.Sprintf("[%d] ", i)))
+			s.WriteString(styles.ErrorStyle.Render(err.Error()))
+			s.WriteString("\n")
 		}
 	}
 	return s.String()

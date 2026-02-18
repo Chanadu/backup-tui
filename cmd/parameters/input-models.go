@@ -3,6 +3,7 @@ package parameters
 import (
 	"strings"
 
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -134,7 +135,7 @@ func (m InputModel) View() string {
 
 	for i := range m.totalItemCount() {
 		if i == m.currentIndex {
-			s.WriteString("> ")
+			s.WriteString(styles.PrimaryStyle.Render("> "))
 		} else {
 			s.WriteString("  ")
 		}
@@ -147,7 +148,8 @@ func (m InputModel) View() string {
 		s.WriteString("\n")
 	}
 
-	s.WriteString("Press tab to switch, enter to submit.\n")
+	s.WriteString("\n")
+	s.WriteString(styles.HelpStyle.Render("Press tab to switch, enter to submit."))
 
 	return s.String()
 }

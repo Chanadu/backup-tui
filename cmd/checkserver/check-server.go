@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/crypto/ssh"
 )
@@ -102,20 +103,22 @@ func (m CheckServerModel) View() string {
 
 	var s strings.Builder
 	if !m.done {
-		s.WriteString("Checking Server...")
+		s.WriteString(styles.InfoStyle.Render("Checking Server..."))
 	} else if !m.success {
-		s.WriteString("Server Connection Failed.")
+		s.WriteString(styles.ErrorStyle.Render("✗ Server Connection Failed."))
 		if m.attempts > 1 {
-			fmt.Fprintf(&s, " (%d)", m.attempts)
+			s.WriteString(styles.MutedStyle.Render(fmt.Sprintf(" (%d)", m.attempts)))
 		}
-		s.WriteString("\n")
-		fmt.Fprintf(&s, "error %v", m.err)
+		s.WriteString("\n\n")
+		s.WriteString(styles.MutedStyle.Render("Error: "))
+		s.WriteString(styles.ErrorStyle.Render(m.err.Error()))
 		s.WriteString("\n\n")
 
-		s.WriteString("Press Enter to change server details.\n")
-		s.WriteString("Press R to retry.")
+		s.WriteString(styles.HelpStyle.Render("Press Enter to change server details."))
+		s.WriteString("\n")
+		s.WriteString(styles.HelpStyle.Render("Press R to retry."))
 	} else {
-		s.WriteString("Server Connected")
+		s.WriteString(styles.SuccessStyle.Render("✓ Server Connected"))
 	}
 
 	s.WriteString("\n")

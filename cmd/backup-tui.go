@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/Chanadu/backup-tui/cmd/getfiles"
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/stage"
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/Chanadu/backup-tui/cmd/uploadbackups"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -154,7 +154,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var s strings.Builder
-	fmt.Fprintf(&s, "\n%s\n\n", m.stageTitle())
+	s.WriteString("\n")
+	s.WriteString(styles.TitleStyle.Render(m.stageTitle()))
+	s.WriteString("\n")
 	switch m.stage {
 	case stage.Input:
 		s.WriteString(m.inputsModel.View())
@@ -168,7 +170,8 @@ func (m model) View() string {
 		s.WriteString(m.uploadBackupsModel.View())
 	}
 
-	s.WriteString("\nPress Ctrl+C to quit.")
+	s.WriteString("\n")
+	s.WriteString(styles.HelpStyle.Render("Press Ctrl+C to quit."))
 
 	return s.String()
 }
@@ -183,7 +186,6 @@ func initialModel(tempDir string) model {
 }
 
 func Start() {
-	fmt.Println("BackupTui")
 	log.Println("=========================BACKUP-TUI=======================================")
 
 	tempDir, err := os.MkdirTemp("", "backup-tui-*")

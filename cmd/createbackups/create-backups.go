@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Chanadu/backup-tui/cmd/parameters"
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -62,7 +63,10 @@ func percentToFraction(percent string) float64 {
 }
 
 func renderProgressBar(percent string) string {
-	bar := progress.New(progress.WithWidth(40))
+	bar := progress.New(
+		progress.WithWidth(40),
+		progress.WithGradient(string(styles.Secondary), string(styles.Primary)),
+	)
 	return bar.ViewAs(percentToFraction(percent))
 }
 
@@ -302,25 +306,36 @@ func (m CreateBackupsModel) View() string {
 				break
 			}
 		}
-		fmt.Fprintf(&s, "[%d/%d] Creating backup for: %s\n", currentIdx, total, m.currentFile)
-		fmt.Fprintf(&s, "%s\n", renderProgressBar(m.progressPercent))
+		label := fmt.Sprintf("[%d/%d] Creating backup for:", currentIdx, total)
+		s.WriteString(styles.ProgressLabelStyle.Render(label))
+		s.WriteString(" ")
+		s.WriteString(m.currentFile)
+		s.WriteString("\n\n")
+		s.WriteString(renderProgressBar(m.progressPercent))
+		s.WriteString("\n")
 
 		if m.data.Commands && m.currentFile != "" {
 			baseName := filepath.Base(m.currentFile)
 			archiveName := baseName + "-backup.7z"
 			archivePath := filepath.Join(m.tempDir, archiveName)
 			cmdStr := fmt.Sprintf("7z a -mx=9 -bsp1 %s %s", archivePath, m.currentFile)
-			fmt.Fprintf(&s, "Command: %s\n", cmdStr)
+			s.WriteString("\n")
+			s.WriteString(styles.MutedStyle.Render("Command: "))
+			s.WriteString(styles.InfoStyle.Render(cmdStr))
+			s.WriteString("\n")
 		}
 
 		return s.String()
 	}
 	if m.success {
-		s.WriteString("All backups created successfully!")
+		s.WriteString(styles.SuccessStyle.Render("✓ All backups created successfully!"))
 	} else {
-		fmt.Fprintf(&s, "Backups finished with %d errors.", len(m.errs))
+		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("✗ Backups finished with %d errors.", len(m.errs))))
+		s.WriteString("\n\n")
 		for i, err := range m.errs {
-			fmt.Fprintf(&s, "[%d] %s: %v", i, m.paths[i], err)
+			s.WriteString(styles.MutedStyle.Render(fmt.Sprintf("[%d] %s: ", i, m.paths[i])))
+			s.WriteString(styles.ErrorStyle.Render(err.Error()))
+			s.WriteString("\n")
 		}
 	}
 	return s.String()

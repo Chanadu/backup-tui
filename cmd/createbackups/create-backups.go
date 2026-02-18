@@ -17,6 +17,7 @@ import (
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -221,6 +222,7 @@ type CreateBackupsModel struct {
 	currentIdx  int
 
 	progressPercent string
+	spinner         spinner.Model
 
 	runtimeState *backupRuntimeState
 	doneCh       chan error
@@ -281,7 +283,7 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 
 		m.currentFile = m.paths[m.currentIdx]
 		m.currentBackupStart = time.Now()
-		return m, tea.Batch(m.backupCmd(m.currentFile), backupTickCmd())
+		return m, tea.Batch(m.backupCmd(m.currentFile), backupTickCmd(), m.spinner.Tick)
 
 	case BackupTickMsg:
 		if m.runtimeState != nil {
@@ -311,7 +313,10 @@ func (m CreateBackupsModel) Update(msg tea.Msg) (CreateBackupsModel, tea.Cmd) {
 		m.errs = msg.Errs
 		return m, nil
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.spinner, cmd = m.spinner.Update(msg)
+	return m, cmd
 }
 
 func (m CreateBackupsModel) View() string {
@@ -330,6 +335,8 @@ func (m CreateBackupsModel) View() string {
 		s.WriteString(" ")
 		s.WriteString(m.currentFile)
 		s.WriteString("\n\n")
+		s.WriteString(m.spinner.View())
+		s.WriteString(" ")
 		s.WriteString(renderProgressBar(m.progressPercent))
 		s.WriteString("\n")
 
@@ -409,11 +416,16 @@ func (m CreateBackupsModel) View() string {
 }
 
 func InitialCreateBackupsModel(data parameters.InputData, paths []string, tempDir string) CreateBackupsModel {
+	s := spinner.New()
+	s.Spinner = spinner.Points
+	s.Style = styles.InfoStyle
+
 	model := CreateBackupsModel{
 		data:       data,
 		tempDir:    tempDir,
 		paths:      paths,
 		currentIdx: -1,
+		spinner:    s,
 	}
 	return model
 }

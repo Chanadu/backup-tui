@@ -15,6 +15,7 @@ import (
 	"github.com/Chanadu/backup-tui/cmd/parameters"
 	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -152,6 +153,7 @@ type UploadBackupsModel struct {
 	currentIdx  int
 	totalFiles  int
 	uploadPct   string
+	spinner     spinner.Model
 
 	runtimeState *uploadRuntimeState
 	doneCh       chan error
@@ -322,7 +324,7 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 		m.runtimeState = &uploadRuntimeState{}
 		m.doneCh = make(chan error, 1)
 
-		return m, tea.Batch(uploadFileCmd(m, m.currentFile, m.runtimeState, m.doneCh), uploadTickCmd())
+		return m, tea.Batch(uploadFileCmd(m, m.currentFile, m.runtimeState, m.doneCh), uploadTickCmd(), m.spinner.Tick)
 
 	case UploadTickMsg:
 		if m.runtimeState != nil {
@@ -358,7 +360,10 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 		m.errs = msg.Errs
 		return m, nil
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.spinner, cmd = m.spinner.Update(msg)
+	return m, cmd
 }
 
 func (m UploadBackupsModel) View() string {
@@ -369,6 +374,8 @@ func (m UploadBackupsModel) View() string {
 		s.WriteString("  ")
 		s.WriteString(m.currentFile)
 		s.WriteString("\n")
+		s.WriteString(m.spinner.View())
+		s.WriteString(" ")
 		s.WriteString(renderProgressBar(m.uploadPct))
 		s.WriteString("\n")
 
@@ -399,7 +406,7 @@ func (m UploadBackupsModel) View() string {
 		s.WriteString(styles.TimerLabelStyle.Render("Total time: "))
 		s.WriteString(styles.TimerStyle.Render(fmt.Sprintf("%.2fs", totalTime.Seconds())))
 		s.WriteString("\n")
-		
+
 		// Combined timing table
 		if len(m.uploadTimes) > 0 || len(m.creationTimes) > 0 {
 			s.WriteString("\n")
@@ -465,10 +472,15 @@ func (m UploadBackupsModel) View() string {
 }
 
 func InitialUploadBackupsModel(data parameters.InputData, tempDir string, creationTimes []time.Duration, creationPaths []string) UploadBackupsModel {
+	s := spinner.New()
+	s.Spinner = spinner.Points
+	s.Style = styles.InfoStyle
+
 	return UploadBackupsModel{
 		data:          data,
 		tempDir:       tempDir,
 		creationTimes: creationTimes,
 		creationPaths: creationPaths,
+		spinner:       s,
 	}
 }

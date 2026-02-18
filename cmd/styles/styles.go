@@ -62,7 +62,7 @@ var (
 			Bold(true)
 
 	TimerLabelStyle = lipgloss.NewStyle().
-				Foreground(Secondary)
+			Foreground(Secondary)
 
 	// Progress styles
 	ProgressLabelStyle = lipgloss.NewStyle().

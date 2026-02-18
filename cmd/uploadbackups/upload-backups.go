@@ -34,12 +34,16 @@ func (m *UploadBackupsModel) uploadBackupsMessageCmd(err error) tea.Cmd {
 }
 
 type SetCurrentFileMsg struct {
-	File string
+	File  string
+	Index int
+	Total int
 }
 
 type UploadFileResultMsg struct {
 	Err error
 }
+
+type UploadFinishedMsg struct{}
 
 type UploadBackupsModel struct {
 	data        parameters.InputData
@@ -49,6 +53,8 @@ type UploadBackupsModel struct {
 	success     bool
 	errs        []error
 	currentFile string
+	currentIdx  int
+	totalFiles  int
 
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
@@ -122,9 +128,9 @@ func (m *UploadBackupsModel) uploadSingleFile(fileName string) error {
 	return nil
 }
 
-func setCurrentFileCmd(file string) tea.Cmd {
+func setCurrentFileCmd(file string, index int, total int) tea.Cmd {
 	return func() tea.Msg {
-		return SetCurrentFileMsg{File: file}
+		return SetCurrentFileMsg{File: file, Index: index, Total: total}
 	}
 }
 
@@ -134,15 +140,16 @@ func uploadFileCmd(m UploadBackupsModel, file string) tea.Cmd {
 		if err != nil {
 			log.Printf("Error uploading file %s: %v", file, err)
 		}
-		return m.uploadBackupsMessageCmd(err)
+		return UploadFileResultMsg{Err: err}
 	}
 }
 
 func (m UploadBackupsModel) startUploadCmd(files []string) tea.Msg {
 	var cmds []tea.Cmd
 
-	for _, file := range files {
-		cmds = append(cmds, setCurrentFileCmd(file))
+	total := len(files)
+	for i, file := range files {
+		cmds = append(cmds, setCurrentFileCmd(file, i+1, total))
 		cmds = append(cmds, uploadFileCmd(m, file))
 	}
 	cmds = append(cmds, func() tea.Msg {
@@ -159,7 +166,7 @@ func (m UploadBackupsModel) startUploadCmd(files []string) tea.Msg {
 			}
 		}
 
-		return m.uploadBackupsMessageCmd(nil)()
+		return UploadFinishedMsg{}
 	})
 	log.Printf("Starting Uploads")
 	return tea.Sequence(cmds...)()
@@ -195,12 +202,16 @@ func (m UploadBackupsModel) Update(msg tea.Msg) (UploadBackupsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case SetCurrentFileMsg:
 		m.currentFile = msg.File
+		m.currentIdx = msg.Index
+		m.totalFiles = msg.Total
 		return m, nil
 	case UploadFileResultMsg:
 		if msg.Err != nil {
 			m.errs = append(m.errs, msg.Err)
 		}
 		return m, nil
+	case UploadFinishedMsg:
+		return m, m.uploadBackupsMessageCmd(nil)
 	case UploadBackupsMessage:
 		m.done = true
 		m.success = msg.Ok
@@ -214,15 +225,7 @@ func (m UploadBackupsModel) View() string {
 	var s strings.Builder
 	s.WriteString("\nUpload Backups\n")
 	if !m.done {
-		currentIdx := 0
-		total := len(m.files)
-		for i, f := range m.files {
-			if f == m.currentFile {
-				currentIdx = i + 1
-				break
-			}
-		}
-		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", currentIdx, total, m.currentFile)
+		fmt.Fprintf(&s, "[%d/%d] Uploading:  %s\n", m.currentIdx, m.totalFiles, m.currentFile)
 
 	} else if m.success {
 		s.WriteString("All files uploaded successfully!\n")

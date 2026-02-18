@@ -11,6 +11,37 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func ensureBackupPath(client *ssh.Client, backupPath string) error {
+	trimmed := strings.TrimSpace(backupPath)
+	if trimmed == "" {
+		return fmt.Errorf("backup path is empty")
+	}
+
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("creating SSH session for backup path check: %w", err)
+	}
+	defer func() {
+		_ = session.Close()
+	}()
+
+	quotedPath := shellSingleQuote(trimmed)
+	command := fmt.Sprintf("p=%s; mkdir -p \"$p\" && [ -d \"$p\" ] && [ -w \"$p\" ]", quotedPath)
+	output, err := session.CombinedOutput(command)
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("backup path check failed (%s): %w", strings.TrimSpace(string(output)), err)
+		}
+		return fmt.Errorf("backup path check failed: %w", err)
+	}
+
+	return nil
+}
+
 type CheckServerMessage struct {
 	Ok  bool
 	Err error
@@ -52,12 +83,21 @@ func (m *CheckServerModel) checkServer() tea.Msg {
 			Err: fmt.Errorf("connecting to server: %v", err),
 		}
 	}
+	if err := ensureBackupPath(client, m.data.BackupPath); err != nil {
+		_ = client.Close()
+		log.Printf("backup path check failed: %v", err)
+		return CheckServerMessage{
+			Ok:  false,
+			Err: fmt.Errorf("validating backup path: %v", err),
+		}
+	}
+
 	err = client.Close()
 	if err != nil {
 		log.Printf("error closing connection: %v", err)
 	}
 
-	log.Printf("Connection success")
+	log.Printf("Connection success; backup path verified")
 	return CheckServerMessage{
 		Ok:  true,
 		Err: nil,

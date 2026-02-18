@@ -431,18 +431,27 @@ func (m Model) View() string {
 		}
 
 		isSymlink := info.Mode()&os.ModeSymlink != 0
+		isDir := f.IsDir()
 		size := strings.Replace(humanize.Bytes(uint64(info.Size())), " ", "", 1) //nolint:gosec
 		name := f.Name()
 
 		if isSymlink {
 			symlinkPath, _ = filepath.EvalSymlinks(filepath.Join(m.CurrentDirectory, name))
+			if symlinkPath != "" {
+				targetInfo, statErr := os.Stat(symlinkPath)
+				if statErr == nil && targetInfo.IsDir() {
+					isDir = true
+				}
+			}
 		}
 
 		if isSame, _ := arePathsEquivalent(symlinkPath, filepath.Join(m.CurrentDirectory, f.Name())); isSame {
 			isSymlink = false
 		}
 
-		disabled := !m.canSelect(name) && !f.IsDir()
+		displaySymlink := isSymlink && !isDir
+
+		disabled := !m.canSelect(name) && !isDir
 
 		if m.selected == i { //nolint:nestif
 			selected := ""
@@ -453,7 +462,7 @@ func (m Model) View() string {
 				selected += fmt.Sprintf("%"+strconv.Itoa(m.Styles.FileSize.GetWidth())+"s", size)
 			}
 			selected += " " + name
-			if isSymlink {
+			if displaySymlink {
 				selected += " → " + symlinkPath
 			}
 			if disabled {
@@ -466,9 +475,9 @@ func (m Model) View() string {
 		}
 
 		style := m.Styles.File
-		if f.IsDir() {
+		if isDir {
 			style = m.Styles.Directory
-		} else if isSymlink {
+		} else if displaySymlink {
 			style = m.Styles.Symlink
 		} else if disabled {
 			style = m.Styles.DisabledFile
@@ -476,7 +485,7 @@ func (m Model) View() string {
 
 		fileName := style.Render(name)
 		s.WriteString(m.Styles.Cursor.Render(" "))
-		if isSymlink {
+		if displaySymlink {
 			fileName += " → " + symlinkPath
 		}
 		if m.ShowPermissions {

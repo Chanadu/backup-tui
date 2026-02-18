@@ -30,6 +30,16 @@ type FileSelectorModel struct {
 	tempDir string
 }
 
+func isSearchEditKey(msg tea.KeyMsg) bool {
+	str := msg.String()
+	if str == "backspace" || str == "delete" || str == " " {
+		return true
+	}
+
+	r := []rune(str)
+	return len(r) == 1
+}
+
 func initialFilePicker(dir string) filepicker.Model {
 	fp := filepicker.New()
 	fp.AllowedTypes = nil
@@ -95,18 +105,31 @@ func (m FileSelectorModel) createFilteredSymlinkDir(srcDir string, query string)
 
 	lowerQuery := strings.ToLower(query)
 	for _, file := range files {
-		name := strings.ToLower(file.Name())
-		ext := strings.ToLower(filepath.Ext(name))
-		if lowerQuery == "" || strings.Contains(name, lowerQuery) ||
+		originalName := file.Name()
+		lowerName := strings.ToLower(originalName)
+		ext := strings.ToLower(filepath.Ext(originalName))
+		if lowerQuery == "" || strings.Contains(lowerName, lowerQuery) ||
 			strings.Contains(ext, lowerQuery) {
 
-			srcPath := filepath.Join(srcDir, name)
-			dstPath := filepath.Join(m.tempDir, name)
+			srcPath := filepath.Join(srcDir, originalName)
+			dstPath := filepath.Join(m.tempDir, originalName)
 
-			err := os.Symlink(srcPath, dstPath)
+			if file.IsDir() {
+				err := os.Symlink(srcPath, dstPath)
+				if err != nil {
+					log.Printf("error creating symlink: %v", err)
+				}
+				continue
+			}
+
+			err := os.Link(srcPath, dstPath)
+			if err != nil {
+				// Fallback to symlink if hard link is not supported (e.g., cross-device)
+				err = os.Symlink(srcPath, dstPath)
+			}
 
 			if err != nil {
-				log.Printf("error creating symlink: %v", err)
+				log.Printf("error creating filtered entry: %v", err)
 				continue
 			}
 		}
@@ -126,6 +149,12 @@ func (m FileSelectorModel) handleSearch(msg tea.Msg) (FileSelectorModel, tea.Cmd
 		return m, cmd
 	}
 
+	if strings.TrimSpace(newSearch) == "" {
+		m.UsingFilteredDir = false
+		m.Picker.SetCurrentDirectory(m.Dir)
+		return m, tea.Batch(m.Picker.Init(), cmd)
+	}
+
 	utils.ClearDir(m.tempDir)
 
 	err := m.createFilteredSymlinkDir(m.Dir, newSearch)
@@ -136,6 +165,7 @@ func (m FileSelectorModel) handleSearch(msg tea.Msg) (FileSelectorModel, tea.Cmd
 	}
 
 	log.Printf("Switching to filtered dir: %s", m.tempDir)
+	m.UsingFilteredDir = true
 	m.Picker.SetCurrentDirectory(m.tempDir)
 	return m, tea.Batch(m.Picker.Init(), cmd)
 }
@@ -152,10 +182,10 @@ func (m FileSelectorModel) Update(msg tea.Msg) (FileSelectorModel, tea.Cmd) {
 	case tea.KeyMsg:
 		strMsg := msg.String()
 
-		if !m.Prompting && strMsg != " " {
+		if !m.Prompting && isSearchEditKey(msg) {
 			m, cmd = m.handleSearch(msg)
 			cmds = append(cmds, cmd)
-			break
+			return m, tea.Batch(cmds...)
 		}
 
 		switch strMsg {

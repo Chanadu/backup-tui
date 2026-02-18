@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -38,13 +39,24 @@ func (m SwitchModel) Update(msg tea.Msg) (SwitchModel, tea.Cmd) {
 
 func (m SwitchModel) View() string {
 	var s strings.Builder
+	check := "[ ]"
 	if m.enabled {
-		s.WriteString("[x]")
+		check = "[x]"
+	}
+
+	if m.focused {
+		s.WriteString(styles.PrimaryStyle.Render(check))
+	} else if m.enabled {
+		s.WriteString(styles.SuccessStyle.Render(check))
 	} else {
-		s.WriteString("[ ]")
+		s.WriteString(styles.MutedStyle.Render(check))
 	}
 	s.WriteString(" ")
-	s.WriteString(m.prompt)
+	if m.focused {
+		s.WriteString(styles.SecondaryStyle.Render(m.prompt))
+	} else {
+		s.WriteString(styles.InfoStyle.Render(m.prompt))
+	}
 
 	return s.String()
 }

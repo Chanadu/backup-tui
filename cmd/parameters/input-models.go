@@ -135,9 +135,9 @@ func (m InputModel) View() string {
 
 	for i := range m.totalItemCount() {
 		if i == m.currentIndex {
-			s.WriteString(styles.PrimaryStyle.Render("> "))
+			s.WriteString(styles.PrimaryStyle.Render("❯ "))
 		} else {
-			s.WriteString("  ")
+			s.WriteString(styles.MutedStyle.Render("· "))
 		}
 
 		if m.textInputSelected(i) {
@@ -149,7 +149,7 @@ func (m InputModel) View() string {
 	}
 
 	s.WriteString("\n")
-	s.WriteString(styles.HelpStyle.Render("Press tab to switch, enter to submit."))
+	s.WriteString(styles.HelpStyle.Render("Tab/Shift+Tab: navigate  •  Space: toggle switch  •  Enter: submit"))
 
 	return s.String()
 }

@@ -5,13 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/Chanadu/backup-tui/cmd/getfiles/filepicker"
 	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/Chanadu/backup-tui/cmd/utils"
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )

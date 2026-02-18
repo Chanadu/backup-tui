@@ -3,6 +3,7 @@ package parameters
 import (
 	"strings"
 
+	"github.com/Chanadu/backup-tui/cmd/styles"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -34,6 +35,10 @@ func InitalTextModel(name string, prompt string, placeholder string, isPassword 
 	ti := textinput.New()
 	ti.Prompt = prompt
 	ti.Placeholder = placeholder
+	ti.PromptStyle = styles.SecondaryStyle
+	ti.PlaceholderStyle = styles.MutedStyle
+	ti.TextStyle = styles.InfoStyle
+	ti.Cursor.Style = styles.PrimaryStyle
 	if isPassword {
 		ti.EchoMode = textinput.EchoPassword
 	}
